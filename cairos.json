@@ -1,0 +1,13 @@
+{
+    "path": "{{ cairos_dir }}",
+    "env": [
+        { "PYTHONPATH": [{
+            "method": "append",
+            "value": "{{ cairos_dir }}/python"
+        }, {
+            "method": "append",
+            "value": "{{ venv_lib }}"
+        }]},
+        { "HOUDINI_OTLSCAN_PATH": "{{ cairos_dir }}/hda"}
+    ]
+}
