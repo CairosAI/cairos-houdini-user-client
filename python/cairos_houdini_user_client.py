@@ -1,7 +1,15 @@
-import hou
-import json
 import asyncio
 from pathlib import Path
+import shutil
+
+from cairos_python_lowlevel.cairos_python_lowlevel.models.avatar_public import AvatarPublic
+from cairos_python_lowlevel.cairos_python_lowlevel.models.body_post_avatar_avatar_uuid_upload_post import BodyPostAvatarAvatarUuidUploadPost
+from cairos_python_lowlevel.cairos_python_lowlevel.models.http_validation_error import HTTPValidationError
+from cairos_python_lowlevel.cairos_python_lowlevel.types import File
+
+import hou
+import haio
+import tempfile
 
 import cairos_python_client
 
@@ -13,7 +21,13 @@ from cairos_python_lowlevel.cairos_python_lowlevel.models.orm_animation import O
 from cairos_python_lowlevel.cairos_python_lowlevel.models.export import Export
 
 from cairos_python_lowlevel.cairos_python_lowlevel.client import Client, AuthenticatedClient
-from cairos_python_lowlevel.cairos_python_lowlevel.api.default import process_message_thread_thread_id_post, export_anim_anim_thread_id_trigger_msg_id_export_post
+from cairos_python_lowlevel.cairos_python_lowlevel.api.default import (
+    process_message_thread_thread_id_post,
+    export_anim_anim_thread_id_trigger_msg_id_export_post,
+    post_avatar_avatar_uuid_upload_post,
+    get_avatars_avatar_get,
+    trigger_autorig_avatar_uuid_autorig_post,
+    create_blank_avatar_avatar_new_label_post)
 
 from uuid import uuid4, UUID
 import httpx_sse
@@ -46,24 +60,43 @@ async def sse_handler(client: AuthenticatedClient, node: hou.Node):
 
             # print(evt)
             if evt.event == "animation_success":
-                update_status(node, "Animation success")
+                update_status(node, "Animation success. Triggering export.")
                 await on_sequencer_success(
                     client,
                     OrmAnimation.from_dict(evt.json()))
             elif evt.event == "animation_error":
                 print(f"Animation error {evt}")
-                update_status(node, "Animation error")
+                update_status(node, "Animation error!")
             elif evt.event == "export_success":
                 try:
                     update_status(node, "Export success")
                     await on_export_success(
                         client,
-                        Export.from_dict(evt.json()))
+                        Export.from_dict(evt.json()),
+                        node)
                 except:
                     traceback.print_exc()
             elif evt.event == "export_error":
                 print(f"Export error {evt}")
                 update_status(node, "Export error")
+
+            elif evt.event == "avatar_upload_success":
+                try:
+                    await on_avatar_upload_success(
+                        client,
+                        AvatarPublic.from_dict(evt.json()),
+                        node)
+                except:
+                    traceback.print_exc()
+            elif evt.event == "avatar_upload_err":
+                update_status(node, f"Avatar upload error: {evt.data}")
+            elif evt.event == "avatar_autorig_success":
+                await on_avatar_autorig_success(
+                    client,
+                    AvatarPublic.from_dict(evt.json()),
+                    node)
+            elif evt.event == "avatar_autorig_err":
+                update_status(node, f"Autorig error: {evt.data}")
             else:
                 print(evt)
 
@@ -84,8 +117,8 @@ async def send_chat(client: AuthenticatedClient, avatar: AvatarMetadata, chat_th
             btl_objs=[]),
         outseta_nocode_access_token=client._cookies.get(cairos_python_client.token_cookie_name, ""))
 
-    print("Chat response received")
-    update_status(node, "Chat response received")
+    print("Chat response received. Waiting for animation sequence.")
+    update_status(node, "Chat response received. Waiting for animation sequence.")
 
 async def send_export(client: AuthenticatedClient, thread_id: str, trigger_msg: UUID):
     res = await export_anim_anim_thread_id_trigger_msg_id_export_post.asyncio(
@@ -94,58 +127,151 @@ async def send_export(client: AuthenticatedClient, thread_id: str, trigger_msg: 
         client=client,
         outseta_nocode_access_token=client._cookies.get(cairos_python_client.token_cookie_name, ""))
 
-    print("Export response received")
+    # print("Export response received. Waiting for export to complete.")
     print(res)
+
+async def send_autorig(client: AuthenticatedClient, avatar: AvatarPublic):
+    print(f"Sending autorig for {avatar.label}")
+    res = await trigger_autorig_avatar_uuid_autorig_post.asyncio(
+        uuid=avatar.id.hex,
+        client=client,
+        outseta_nocode_access_token=client._cookies.get(cairos_python_client.token_cookie_name, ""))
+
+    # print("Autorig response received. Wait for process to complete.")
+    print(res)
+
+async def upload_avatar(
+        client: AuthenticatedClient,
+        avatar_name: str,
+        avatar_geo_node: hou.SopNode,
+        node: hou.Node):
+    avatars = await get_avatars_avatar_get.asyncio(
+        client=client,
+        outseta_nocode_access_token=client._cookies.get(cairos_python_client.token_cookie_name, ""))
+
+    assert avatars and not isinstance(avatars, HTTPValidationError), "Avatars are empty!"
+    avatar: AvatarPublic | None = next((a for a in avatars if a.label == avatar_name), None)
+
+    if avatar is None:
+        update_status(node, "Avatar was not found. Creating a new one.")
+        print("Avatar was not found. Creating a new one.")
+        avatar_resp = await create_blank_avatar_avatar_new_label_post.asyncio(
+            label=avatar_name,
+            client=client,
+            outseta_nocode_access_token=client._cookies.get(cairos_python_client.token_cookie_name, ""))
+
+        update_status(node, "Created new avatar.")
+        print(f"Created new avatar: {avatar_resp}")
+        if avatar_resp and not isinstance(avatar_resp, HTTPValidationError):
+            avatar = avatar_resp
+
+    assert avatar, "No avatar selected"
+
+    tmp: tuple[int, str] = tempfile.mkstemp(
+        prefix=f"cairos_{avatar_name}",
+        suffix=".bgeo",
+        dir=hou.getenv("HOUDINI_TEMP_DIR"))
+
+    # TODO for now do not delete temporary file
+    try:
+        with open(tmp[1], "wb+") as f:
+            update_status(node, "Exporting geometry for avatar...")
+            avatar_geo_node.geometry().saveToFile(f.name)
+            print(f"Saved geometry to {f.name}")
+            update_status(node, "Geometry exported, uploading.")
+
+            await post_avatar_avatar_uuid_upload_post.asyncio(
+                uuid=avatar.id.hex,
+                client=client,
+                body=BodyPostAvatarAvatarUuidUploadPost(
+                    file=File(
+                        payload=f,
+                        file_name=f.name)),
+                outseta_nocode_access_token=client._cookies.get(cairos_python_client.token_cookie_name, ""))
+
+            update_status(node, "Avatar file uploaded. Wait for processing.")
+    except:
+        traceback.print_exc()
+
 
 async def on_sequencer_success(client: AuthenticatedClient, animation: OrmAnimation):
     # trigger export
     # how to get context
-    print("Received sequencer success. Triggering export")
-    try:
-        await send_export(client, animation.job_thread, animation.job_trigger)
-    except:
-        traceback.print_exc()
+    print("Received sequencer success. Triggering export.")
+    await send_export(client, animation.job_thread, animation.job_trigger)
 
-async def download_export(client: AuthenticatedClient, export: Export):
-    filename = Path(hou.getenv("HOUDINI_TEMP_DIR")).with_suffix(
-        Path(export.filepath).suffix)
+async def on_avatar_upload_success(client: AuthenticatedClient, avatar: AvatarPublic, node: hou.Node):
+    print("Received upload processing success. Wait for autorig")
+    update_status(node, "Received upload processing success. Wait for autorig")
+    await send_autorig(client, avatar)
+
+async def on_avatar_autorig_success(client: AuthenticatedClient, avatar: AvatarPublic, node: hou.Node):
+    print("Autorig successful!")
+    update_status(node, "Autorig successful. Avatar is now ready to use")
+
+async def download_export(client: AuthenticatedClient, export: Export) -> Path:
+    filename = Path(hou.getenv("HOUDINI_TEMP_DIR"))\
+        .joinpath(f"{export.job_thread}_{export.job_trigger}")\
+        .with_suffix(Path(export.filepath).suffix)
+
+    out_dir = Path(hou.getenv("HOUDINI_TEMP_DIR"))\
+        .joinpath(f"{export.job_thread}_{export.job_trigger}/extracted")
+
+    # Download content with explicit client get. This probably does not work in api?
     result = await client.get_async_httpx_client().get(
         url=f"{client._base_url}/anim/{export.job_thread}/{export.job_trigger.hex}/download")
 
+    print(f"Download complete: {result}")
     with open(filename, "wb") as f:
         f.write(result.content)
         print(f"Wrote {filename}")
 
-    print("Download complete")
-    print(result)
+    shutil.unpack_archive(filename, out_dir)
 
-async def on_export_success(client: AuthenticatedClient, export: Export):
+    return out_dir
+
+async def load_exported_files(output_directory: Path, node: hou.Node):
+    retargeted = next(output_directory.glob("*retargeted*"))
+    sequencer = next(output_directory.glob("*sequencer*"))
+
+    if retargeted and sequencer:
+        node.node("retarget").parm("fbxfile").set(str(retargeted))
+        node.node("retarget1").parm("fbxfile").set(str(retargeted))
+        node.node("sequence").parm("fbxfile").set(str(sequencer))
+
+    update_status(node, "Loaded export assets. Done.")
+
+async def on_export_success(client: AuthenticatedClient, export: Export, node: hou.Node):
     # download archive
     # unpack it
     # use contents
-    print("Export successful")
+    print("Export successful. Downloading export artifacts.")
     print(export)
-    res = await download_export(client, export)
-    print("Downloaded export")
-    print(res)
+    output_directory = await download_export(client, export)
+    update_status(node, "Export downloaded. Unpacking and loading.")
+    # TODO set paths from export in scene.
+    return await load_exported_files(output_directory, node)
 
 def start_sse_listener(client: AuthenticatedClient, node: hou.Node):
-    loop = asyncio.get_event_loop()
+    asyncio.set_event_loop_policy(haio.HoudiniEventLoopPolicy())
+    loop = haio.get_event_loop()
     loop.set_debug(True)
     asyncio.run_coroutine_threadsafe(sse_handler(client, node), loop)
+    node.setCachedUserData("cairos_loop", loop)
     print(f"Started sse handler with {client}")
 
 def update_status(node: hou.Node, status: str):
     return node.parm("status").set(status)
 
 def on_exit(loop: asyncio.AbstractEventLoop):
-    future = asyncio.run_coroutine_threadsafe(async_shutdown_tasks(loop), loop)
-    future.result()
-
-    print("Stopping event loop")
-    loop.call_soon_threadsafe(loop.stop)
-    loop.call_soon_threadsafe(loop.close)
-
+    async def ashutdown(loop):
+        tasks = [task for task in asyncio.all_tasks(loop) if task is not
+             asyncio.current_task(loop)]
+        list(map(lambda task: task.cancel(), tasks))
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        print(results)
+        loop.stop()
+    asyncio.run_coroutine_threadsafe(ashutdown(loop), loop).result()
 
 async def close_client(client: AuthenticatedClient):
     print("Closing http client")
