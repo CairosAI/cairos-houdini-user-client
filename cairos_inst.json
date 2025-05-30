@@ -1,13 +1,13 @@
 {
-    "path": "/home/mmoshev@bottleship.local/code/cairos-houdini-user-client",
+    "path": "/opt/houdini_plugins/cairos-houdini-user-client",
     "env": [
         { "PYTHONPATH": [{
             "method": "append",
-            "value": "/home/mmoshev@bottleship.local/code/cairos-houdini-user-client/python"
+            "value": "/opt/houdini_plugins/cairos-houdini-user-client/python"
         }, {
             "method": "append",
-            "value": "/usr/local/share/bottleship/venvs/cairos/lib/python3.11/site-packages"
+            "value": "/usr/local/share/cairos/venvs/cairos/lib/python3.11/site-packages"
         }]},
-        { "HOUDINI_OTLSCAN_PATH": "/home/mmoshev@bottleship.local/code/cairos-houdini-user-client/hda"}
+        { "HOUDINI_OTLSCAN_PATH": "/opt/houdini_plugins/cairos-houdini-user-client/hda"}
     ]
 }

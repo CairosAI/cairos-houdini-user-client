@@ -1,0 +1,4 @@
+anyio==4.7.0
+httpx-sse
+./deps/cairos-types
+./deps/cairos-python-client

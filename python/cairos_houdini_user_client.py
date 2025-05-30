@@ -19,6 +19,7 @@ from cairos_python_lowlevel.cairos_python_lowlevel.models.chat_thread_in_list im
 from cairos_python_lowlevel.cairos_python_lowlevel.models.human_message import HumanMessage
 from cairos_python_lowlevel.cairos_python_lowlevel.models.orm_animation import OrmAnimation
 from cairos_python_lowlevel.cairos_python_lowlevel.models.export import Export
+from cairos_python_lowlevel.cairos_python_lowlevel.models.body_login_outseta_login_post import BodyLoginOutsetaLoginPost
 
 from cairos_python_lowlevel.cairos_python_lowlevel.client import Client, AuthenticatedClient
 from cairos_python_lowlevel.cairos_python_lowlevel.api.default import (
@@ -27,7 +28,8 @@ from cairos_python_lowlevel.cairos_python_lowlevel.api.default import (
     post_avatar_avatar_uuid_upload_post,
     get_avatars_avatar_get,
     trigger_autorig_avatar_uuid_autorig_post,
-    create_blank_avatar_avatar_new_label_post)
+    create_blank_avatar_avatar_new_label_post,
+    login_outseta_login_post)
 
 from uuid import uuid4, UUID
 import httpx_sse
@@ -54,10 +56,6 @@ async def sse_handler(client: AuthenticatedClient, node: hou.Node):
             method="GET",
             url=f"{client._base_url}/event_log") as event_source:
         async for evt in event_source.aiter_sse():
-            if client.get_async_httpx_client().is_closed:
-                print("Client is closed. Stopping SSE")
-                return
-
             # print(evt)
             if evt.event == "animation_success":
                 update_status(node, "Animation success. Triggering export.")
@@ -145,6 +143,7 @@ async def upload_avatar(
         avatar_name: str,
         avatar_geo_node: hou.SopNode,
         node: hou.Node):
+    print(f"Uploading avatar {avatar_name}")
     avatars = await get_avatars_avatar_get.asyncio(
         client=client,
         outseta_nocode_access_token=client._cookies.get(cairos_python_client.token_cookie_name, ""))
@@ -252,12 +251,8 @@ async def on_export_success(client: AuthenticatedClient, export: Export, node: h
     # TODO set paths from export in scene.
     return await load_exported_files(output_directory, node)
 
-def start_sse_listener(client: AuthenticatedClient, node: hou.Node):
-    asyncio.set_event_loop_policy(haio.HoudiniEventLoopPolicy())
-    loop = haio.get_event_loop()
-    loop.set_debug(True)
-    asyncio.run_coroutine_threadsafe(sse_handler(client, node), loop)
-    node.setCachedUserData("cairos_loop", loop)
+async def start_sse_listener(client: AuthenticatedClient, node: hou.Node):
+    await sse_handler(client, node)
     print(f"Started sse handler with {client}")
 
 def update_status(node: hou.Node, status: str):
@@ -276,3 +271,37 @@ def on_exit(loop: asyncio.AbstractEventLoop):
 async def close_client(client: AuthenticatedClient):
     print("Closing http client")
     await client.get_async_httpx_client().aclose()
+
+async def handle_login(url, username, password, node):
+    # Here initialize asyncio loop
+    try:
+        unauth_client = Client(
+            url,
+            verify_ssl=False,
+            raise_on_unexpected_status=True)
+
+        response = await login_outseta_login_post.asyncio_detailed(
+            client=unauth_client,
+            body=BodyLoginOutsetaLoginPost(
+                username=username,
+                password=password))
+
+        cookies = cairos_python_client.parse_cookies(response.headers.get("Set-Cookie"))
+        client = AuthenticatedClient(
+            base_url=url,
+            token=cookies.get(cairos_python_client.token_cookie_name, ""),
+            verify_ssl=False,
+            cookies=cookies)
+
+        if client:
+            node.setCachedUserData("cairos_client", client)
+            node.parm("status").set("logged in")
+            node.setCachedUserData("cairos_url", url)
+            node.setCachedUserData("cairos_user", username)
+            await start_sse_listener(client, node)
+        else:
+            print("login unsuccessful")
+            update_status(node, "could not log in")
+    except Exception:
+        print("Error!!!")
+        traceback.print_exc()
