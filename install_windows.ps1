@@ -13,7 +13,8 @@ if (-not $venv_path) { $venv_path = $venv_path_default }
 
 $package_dest = Join-Path -Path $houdini_path -ChildPath "\packages\cairos_user.json"
 
-cp ./cairos_inst.json $package_dest
+Get-Content ./cairos_inst_windows.json | ForEach-Object {$_ -replace "{{ plugin_dest }}", $plugin_dest}| ForEach-Object {$_ -replace "{{ venv_path }}", $venv_path} | Set-Content $package_dest
+# cp ./cairos_inst.json $package_dest
 cp . $plugin_dest
 
 python 3.11 -m venv $venv_path

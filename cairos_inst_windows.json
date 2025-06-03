@@ -6,7 +6,7 @@
             "value": "{{ plugin_dest }}/python"
         }, {
             "method": "append",
-            "value": "{{ venv_path }}/lib/python3.11/site-packages"
+            "value": "{{ venv_dest }}/Lib/site-packages"
         }]},
         { "HOUDINI_OTLSCAN_PATH": "{{ plugin_dest }}/hda"}
     ]
