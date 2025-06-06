@@ -1,6 +1,6 @@
 # Cairos Houdini user client
 
-Use Cairos inside Houdini
+Use [Cairos](https://app.cairos.ai) inside Houdini
 
 ## Installing
 Make sure to have a system Python that is compatible with the Houdini Python. For Houdini 20.5 this is Python 3.11.
@@ -30,6 +30,8 @@ The script
 ## Using
 In Houdini, you can add a node `Cairos Houdini user client`.
 
-Go to the Settings tab and click login. Enter the Cairos address you will be using, your username and password.
+Go to the Settings tab and click login. Enter the Cairos address you will be using, your username and password. The public address is https://app.cairos.ai/api
+
+To sign up go to https://cairos.ai .
 
 On successful login, you can go to the Animation tab and submit chat prompts, and manage your avatars in the Avatar tab.
