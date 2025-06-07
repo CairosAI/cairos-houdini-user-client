@@ -169,7 +169,7 @@ async def upload_avatar(
     tmp: tuple[int, str] = tempfile.mkstemp(
         prefix=f"cairos_{avatar_name}",
         suffix=".bgeo",
-        dir=hou.getenv("HOUDINI_TEMP_DIR"))
+        dir=node.parm("tempdir").eval())
 
     # TODO for now do not delete temporary file
     try:
@@ -208,12 +208,12 @@ async def on_avatar_autorig_success(client: AuthenticatedClient, avatar: AvatarP
     print("Autorig successful!")
     update_status(node, "Autorig successful. Avatar is now ready to use")
 
-async def download_export(client: AuthenticatedClient, export: Export) -> Path:
-    filename = Path(hou.getenv("HOUDINI_TEMP_DIR"))\
+async def download_export(client: AuthenticatedClient, export: Export, temp_dir: Path) -> Path:
+    filename = temp_dir\
         .joinpath(f"{export.job_thread}_{export.job_trigger}")\
         .with_suffix(Path(export.filepath).suffix)
 
-    out_dir = Path(hou.getenv("HOUDINI_TEMP_DIR"))\
+    out_dir = temp_dir\
         .joinpath(f"{export.job_thread}_{export.job_trigger}/extracted")
 
     # Download content with explicit client get. This probably does not work in api?
@@ -246,7 +246,7 @@ async def on_export_success(client: AuthenticatedClient, export: Export, node: h
     # use contents
     print("Export successful. Downloading export artifacts.")
     print(export)
-    output_directory = await download_export(client, export)
+    output_directory = await download_export(client, export, Path(node.parm("tempdir").eval()))
     update_status(node, "Export downloaded. Unpacking and loading.")
     # TODO set paths from export in scene.
     return await load_exported_files(output_directory, node)
@@ -257,6 +257,27 @@ async def start_sse_listener(client: AuthenticatedClient, node: hou.Node):
 
 def update_status(node: hou.Node, status: str):
     return node.parm("status").set(status)
+
+async def show_avatar_menu(client: AuthenticatedClient, node: hou.Node):
+    avatars = await get_avatars_avatar_get.asyncio(
+        client=client,
+        outseta_nocode_access_token=client._cookies.get(cairos_python_client.token_cookie_name, ""))
+
+    print(f"avatars: {avatars}")
+    if avatars:
+        choices = hou.ui.selectFromList(
+            [a.label for a in avatars],
+            title="Select avatar",
+            exclusive=True)
+        print(choices)
+        try:
+            avatar_name = avatars[choices[0]].label
+            node.setCachedUserData("current_avatar", avatar_name)
+            print(f"Selected {avatar_name}")
+            node.parm("character_name").set(avatar_name)
+        except:
+            traceback.print_exc()
+
 
 def on_exit(loop: asyncio.AbstractEventLoop):
     async def ashutdown(loop):
