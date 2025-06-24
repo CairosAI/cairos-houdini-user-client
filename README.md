@@ -22,6 +22,8 @@ Windows:
 ./install.ps1
 ```
 
+You will be asked for the location to copy the plugin to, the location of Houdini, the location of a virtual environment, containing some needed dependencies.
+
 The script
 - Copies the plugin.
 - Copies a json package in Houdini's directory, which points Houdini to the plugin.
