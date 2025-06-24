@@ -43,7 +43,7 @@ On successful login, you can go to the Animation tab and submit chat prompts, an
 
 ### Animating
 
-![Workflow overview](./cairos-houduini-user-workflow.png)
+![Workflow overview](./cairos-houdini-user-workflow.png)
 
 You start with an animation, that you obtain by chatting with the agent and getting suggested movements.
 
