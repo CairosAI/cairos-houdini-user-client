@@ -279,8 +279,11 @@ async def on_sequencer_success(client: AuthenticatedClient, animation: OrmAnimat
 
 async def on_avatar_upload_success(client: AuthenticatedClient, avatar: AvatarPublic, node: hou.Node):
     """ sse handler """
-    update_status(node, "Received upload processing success. Wait for autorig")
-    await send_autorig(client, avatar, node)
+    update_status(node, "Received upload processing success.")
+
+    if node.parm("autorig_avatar").eval():
+        update_status(node, "Requesting autorig. Please wait...")
+        await send_autorig(client, avatar, node)
 
 async def on_avatar_autorig_success(client: AuthenticatedClient, avatar: AvatarPublic, node: hou.Node):
     """ sse handler. Do not do anything, just notify """
