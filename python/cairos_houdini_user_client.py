@@ -1,3 +1,5 @@
+import os
+import sys
 import asyncio
 from pathlib import Path
 import shutil
@@ -139,7 +141,22 @@ async def send_chat(client: AuthenticatedClient, chat_thread: ChatThreadInList, 
         print(f"Request error: {e.status_code}")
         if e.status_code == 426:
             content = json.loads(e.content)
-            hou.ui.displayMessage(content["detail"], title="Cairos error")
+            button_res = hou.ui.displayMessage(
+                content["detail"],
+                title="Cairos error",
+                buttons=("Open webiste", "Ok"),
+                default_choice=1,
+                close_choice=1)
+
+            if button_res == 0:
+                print("Opening website")
+                if sys.platform == "win32":
+                    os.system(f"start \"\" https://cairos.outseta.com/profile?tab=planChange")
+                elif sys.platform == "darwin":
+                    os.system(f"open \"\" https://cairos.outseta.com/profile?tab=planChange")
+                else:
+                    os.system(f"xdg-open https://cairos.outseta.com/profile?tab=planChange")
+
             print(content)
             update_status(node, content["detail"])
 
