@@ -343,28 +343,6 @@ async def start_sse_listener(client: AuthenticatedClient, node: hou.Node):
 def update_status(node: hou.Node, status: str):
     return node.parm("status").set(status)
 
-async def show_avatar_menu(client: AuthenticatedClient, node: hou.Node):
-    avatars = await get_avatars_avatar_get.asyncio(
-        client=client,
-        outseta_nocode_access_token=client._cookies.get(cairos_python_client.token_cookie_name, ""))
-
-    print(f"avatars: {avatars}")
-    if avatars:
-        choices = hou.ui.selectFromList(
-            [a.label for a in avatars],
-            title="Select avatar",
-            exclusive=True)
-        print(choices)
-        try:
-            avatar_name = avatars[choices[0]].label
-            node.setCachedUserData("current_avatar", avatar_name)
-            node.setCachedUserData("avatars", avatars)
-            print(f"Selected {avatar_name}")
-            node.parm("character_name").set(avatar_name)
-        except:
-            traceback.print_exc()
-
-
 def on_exit(loop: asyncio.AbstractEventLoop):
     async def ashutdown(loop):
         tasks = [task for task in asyncio.all_tasks(loop) if task is not
@@ -406,6 +384,12 @@ async def handle_login(url, username, password, node):
             node.parm("status").set("logged in")
             node.setCachedUserData("cairos_url", url)
             node.setCachedUserData("cairos_user", username)
+
+            avatars = await get_avatars_avatar_get.asyncio(
+                client=client,
+                outseta_nocode_access_token=client._cookies.get(cairos_python_client.token_cookie_name, ""))
+            node.setCachedUserData("avatars", avatars)
+
             await start_sse_listener(client, node)
         else:
             print("login unsuccessful")
