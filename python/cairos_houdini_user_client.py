@@ -1,11 +1,13 @@
 import asyncio
 from pathlib import Path
 import shutil
+import json
 
 from cairos_python_lowlevel.cairos_python_lowlevel.models.avatar_public import AvatarPublic
 from cairos_python_lowlevel.cairos_python_lowlevel.models.body_post_avatar_avatar_uuid_upload_post import BodyPostAvatarAvatarUuidUploadPost
 from cairos_python_lowlevel.cairos_python_lowlevel.models.http_validation_error import HTTPValidationError
 from cairos_python_lowlevel.cairos_python_lowlevel.types import File
+from httpx import HTTPError, HTTPStatusError
 
 import hou
 import haio
@@ -34,6 +36,8 @@ from cairos_python_lowlevel.cairos_python_lowlevel.api.default import (
     login_outseta_login_post,
     check_credit_balance_credit_balance_get,
     retarget_anim_anim_thread_id_trigger_msg_id_retarget_avatar_id_post)
+
+from cairos_python_lowlevel.cairos_python_lowlevel.errors import UnexpectedStatus
 
 from uuid import uuid4, UUID
 import httpx_sse
@@ -117,19 +121,30 @@ async def send_chat(client: AuthenticatedClient, chat_thread: ChatThreadInList, 
     """
     print(f"Sending chat {prompt}")
     update_status(node, "Sending chat")
-    await process_message_thread_thread_id_post.asyncio(
-        thread_id=chat_thread.id,
-        client=client,
-        body=ChatInput(
-            prompt=HumanMessage(
-                id=uuid4().hex,
-                content=prompt),
-            history=[],
-            btl_objs=[]),
-        outseta_nocode_access_token=client._cookies.get(cairos_python_client.token_cookie_name, ""))
+    try:
+        response = await process_message_thread_thread_id_post.asyncio(
+            thread_id=chat_thread.id,
+            client=client,
+            body=ChatInput(
+                prompt=HumanMessage(
+                    id=uuid4().hex,
+                    content=prompt),
+                history=[],
+                btl_objs=[]),
+            outseta_nocode_access_token=client._cookies.get(cairos_python_client.token_cookie_name, ""))
 
-    print("Chat response received. Waiting for animation sequence.")
-    update_status(node, "Chat response received. Waiting for animation sequence.")
+        print(f"Chat response received: {response}. Waiting for animation sequence.")
+        update_status(node, "Chat response received. Waiting for animation sequence.")
+    except UnexpectedStatus as e:
+        print(f"Request error: {e.status_code}")
+        if e.status_code == 426:
+            content = json.loads(e.content)
+            hou.ui.displayMessage(content["detail"], title="Cairos error")
+            print(content)
+            update_status(node, content["detail"])
+
+    except Exception as e:
+        print(f"Request error: {e}")
 
 async def send_export(client: AuthenticatedClient, thread_id: str, trigger_msg: UUID):
     """ Final result is received by sse, export_success or export_error.
@@ -383,7 +398,8 @@ async def handle_login(url, username, password, node):
             base_url=url,
             token=cookies.get(cairos_python_client.token_cookie_name, ""),
             verify_ssl=False,
-            cookies=cookies)
+            cookies=cookies,
+            raise_on_unexpected_status=True)
 
         if client:
             node.setCachedUserData("cairos_client", client)
