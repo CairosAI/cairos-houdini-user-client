@@ -112,7 +112,10 @@ async def sse_handler(client: AuthenticatedClient, node: hou.Node):
             elif evt.event == "animation_retarget_err":
                 update_status(node, f"Retarget error: {evt.data}")
             else:
-                update_status(node, str(evt))
+                if node.parm("debug_log").eval() and evt.event == "debug":
+                    update_status(node, str(evt))
+                else:
+                    update_status(node, str(evt))
 
     update_status(node, "Exiting sse loop")
 
@@ -132,7 +135,9 @@ async def send_chat(client: AuthenticatedClient, chat_thread: ChatThreadInList, 
                 btl_objs=[]),
             outseta_nocode_access_token=client._cookies.get(cairos_python_client.token_cookie_name, ""))
 
-        update_status(node, f"Chat response received: {response}. Waiting for animation sequence.")
+        update_status(node, f"Chat response received. Waiting for animation sequence.")
+        if node.parm("debug_log").eval():
+            update_status(node, str(response))
     except UnexpectedStatus as e:
         update_status(node, f"Request error: {e.status_code}")
         if e.status_code == 426:
@@ -379,6 +384,7 @@ async def handle_login(url, username, password, node):
     # Here initialize asyncio loop
     try:
         node.setCachedUserData("status_queue", deque(maxlen=10))
+        node.parm("status").set("")
         unauth_client = Client(
             url,
             verify_ssl=False,
