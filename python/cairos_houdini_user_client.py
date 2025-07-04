@@ -5,6 +5,7 @@ from collections import deque
 from pathlib import Path
 import shutil
 import json
+from typing import Any, Dict, List, Type, TypeVar, cast
 
 from cairos_python_lowlevel.cairos_python_lowlevel.models.avatar_public import AvatarPublic
 from cairos_python_lowlevel.cairos_python_lowlevel.models.body_post_avatar_avatar_uuid_upload_post import BodyPostAvatarAvatarUuidUploadPost
@@ -38,14 +39,46 @@ from cairos_python_lowlevel.cairos_python_lowlevel.api.default import (
     create_blank_avatar_avatar_new_label_post,
     login_outseta_login_post,
     check_credit_balance_credit_balance_get,
-    retarget_anim_anim_thread_id_trigger_msg_id_retarget_avatar_id_post)
+    retarget_anim_anim_thread_id_trigger_msg_id_retarget_avatar_id_post,
+    create_blank_avatar_avatar_new_label_post,
+    trigger_export_avatar_uuid_export_post)
 
 from cairos_python_lowlevel.cairos_python_lowlevel.errors import UnexpectedStatus
 
 from uuid import uuid4, UUID
 import httpx_sse
 
+from attrs import define as _attrs_define
+
 import traceback
+
+T = TypeVar("T", bound="AvatarExport")
+@_attrs_define
+class AvatarExport:
+    """ Placeholder model. This model is not exposed by OpenAPI def,
+    because it is only returned in SSE, which is currently not covered by it.
+    """
+    user_id: str
+    avatar_id: UUID
+    avatar_user_id: str
+    filepath: str
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "user_id": self.user_id,
+            "avatar_id": str(self.avatar_id),
+            "avatar_user_id": self.avatar_user_id,
+            "filepath": self.filepath
+        }
+
+    @classmethod
+    def from_dict(cls: Type[T], src_dict: Dict[str, Any]) -> T:
+        d = src_dict.copy()
+        return cls(
+            user_id=d.pop("user_id"),
+            avatar_id=UUID(d.pop("avatar_id")),
+            avatar_user_id=d.pop("avatar_user_id"),
+            filepath=d.pop("filepath"))
 
 async def async_cancel_all_tasks(loop: asyncio.AbstractEventLoop):
     tasks = [
@@ -104,6 +137,13 @@ async def sse_handler(client: AuthenticatedClient, node: hou.Node):
                     node)
             elif evt.event == "avatar_autorig_err":
                 update_status(node, f"Autorig error: {evt.data}")
+            elif evt.event == "avatar_export_success":
+                await on_avatar_export_success(
+                    client,
+                    AvatarExport.from_dict(evt.json()),
+                    node)
+            elif evt.event == "avatar_export_err":
+                update_status(node, f"Export error: {evt.data}")
             elif evt.event == "animation_retarget_success":
                 await on_animation_retarget_success(
                     client,
@@ -163,10 +203,10 @@ async def send_chat(client: AuthenticatedClient, chat_thread: ChatThreadInList, 
     except Exception as e:
         update_status(node, f"Request error: {e}")
 
-async def send_export(client: AuthenticatedClient, thread_id: str, trigger_msg: UUID, node: hou.Node):
+async def export_animation(client: AuthenticatedClient, thread_id: str, trigger_msg: UUID, node: hou.Node):
     """ Final result is received by sse, export_success or export_error.
     """
-    res = await export_anim_anim_thread_id_trigger_msg_id_export_post.asyncio(
+    await export_anim_anim_thread_id_trigger_msg_id_export_post.asyncio(
         thread_id=thread_id,
         trigger_msg_id=trigger_msg.hex,
         client=client,
@@ -190,7 +230,7 @@ async def send_retarget(
         hou.ui.displayMessage(f"Avatar does not exist: {avatar_name}")
         return
 
-    res = await retarget_anim_anim_thread_id_trigger_msg_id_retarget_avatar_id_post.asyncio(
+    await retarget_anim_anim_thread_id_trigger_msg_id_retarget_avatar_id_post.asyncio(
         thread_id=thread_id,
         trigger_msg_id=trigger_msg.hex,
         avatar_id=avatar.id.hex,
@@ -199,16 +239,42 @@ async def send_retarget(
 
     update_status(node, "Retarget response received. Waiting for retarget to complete.")
 
-async def send_autorig(client: AuthenticatedClient, avatar: AvatarPublic, node: hou.Node):
+async def autorig_avatar(client: AuthenticatedClient, avatar_name: str, node: hou.Node):
     """ Final result is received by sse, avatar_autorig_success or avatar_autorig_err.
     """
-    update_status(node, f"Sending autorig for {avatar.label}")
-    res = await trigger_autorig_avatar_uuid_autorig_post.asyncio(
-        uuid=avatar.id.hex,
-        client=client,
-        outseta_nocode_access_token=client._cookies.get(cairos_python_client.token_cookie_name, ""))
+    try:
+        avatars = await get_avatars_avatar_get.asyncio(
+            client=client,
+            outseta_nocode_access_token=client._cookies.get(cairos_python_client.token_cookie_name, ""))
+        assert avatars and not isinstance(avatars, HTTPValidationError), "Avatars are empty!"
+        avatar: AvatarPublic | None = next((a for a in avatars if a.label == avatar_name), None)
+        assert avatar, "Avatar not found"
+        update_status(node, f"Sending autorig for {avatar_name}")
 
-    update_status(node, "Autorig response received. Wait for process to complete.")
+        await trigger_autorig_avatar_uuid_autorig_post.asyncio(
+            uuid=avatar.id.hex,
+            client=client,
+            outseta_nocode_access_token=client._cookies.get(cairos_python_client.token_cookie_name, ""))
+
+        update_status(node, "Autorig response received. Wait for process to complete.")
+    except Exception as e:
+        update_status(node, f"Error when requesting autorig: {e}")
+
+async def create_avatar(client: AuthenticatedClient, avatar_name: str, node: hou.Node):
+    update_status(node, f"Creating avatar {avatar_name}")
+    try:
+        res = await create_blank_avatar_avatar_new_label_post.asyncio(
+            avatar_name,
+            client=client,
+            outseta_nocode_access_token=client._cookies.get(cairos_python_client.token_cookie_name, ""))
+    except Exception as e:
+        update_status(node, f"Error while creating avatar: {e}")
+        return
+
+    if isinstance(res, AvatarPublic):
+        update_status(node, f"Avatar created: {res}")
+    else:
+        update_status(node, f"Error while creating avatar: {res}")
 
 async def upload_avatar(
         client: AuthenticatedClient,
@@ -264,35 +330,69 @@ async def upload_avatar(
     except:
         update_status(node, traceback.format_exc())
 
+async def export_avatar(client: AuthenticatedClient, avatar_name: str, node: hou.Node):
+    """ Final result is received by sse, avatar_export_success or avatar_export_err.
+    """
+
+    try:
+        avatars = await get_avatars_avatar_get.asyncio(
+            client=client,
+            outseta_nocode_access_token=client._cookies.get(cairos_python_client.token_cookie_name, ""))
+
+        assert avatars and not isinstance(avatars, HTTPValidationError), "Avatars are empty!"
+        avatar: AvatarPublic | None = next((a for a in avatars if a.label == avatar_name), None)
+        assert avatar, "Avatar not found"
+        update_status(node, f"Sending autorig for {avatar_name}")
+
+        update_status(node, f"Sending avatar export for {avatar.label}")
+        await trigger_export_avatar_uuid_export_post.asyncio(
+            uuid=avatar.id.hex,
+            client=client,
+            outseta_nocode_access_token=client._cookies.get(cairos_python_client.token_cookie_name, ""))
+
+        update_status(node, "Avatar export response received. Wait for process to complete.")
+    except:
+        update_status(node, traceback.format_exc())
+
 
 async def on_sequencer_success(client: AuthenticatedClient, animation: OrmAnimation, node: hou.Node):
     # trigger export
     # how to get context
     """ sse handler """
     update_status(node, "Received sequencer success.")
-    if node.parm("retarget_animation").eval():
+    if node.parm("retarget_animation").eval() == "retarget":
         update_status(node, "Sending retarget request")
         await send_retarget(
             client,
             animation.job_thread,
             animation.job_trigger,
-            node.parm("retarget_avatar").eval(),
+            node.parm("avatar_to_retarget").eval(),
             node)
     else:
         update_status(node, "Sending export request")
-        await send_export(client, animation.job_thread, animation.job_trigger, node)
+        await export_animation(client, animation.job_thread, animation.job_trigger, node)
 
 async def on_avatar_upload_success(client: AuthenticatedClient, avatar: AvatarPublic, node: hou.Node):
     """ sse handler """
-    update_status(node, "Received upload processing success.")
-
-    if node.parm("autorig_avatar").eval():
-        update_status(node, "Requesting autorig. Please wait...")
-        await send_autorig(client, avatar, node)
+    update_status(node, "Received upload processing success. Requesting export, please wait...")
+    await export_avatar(client, avatar, node)
 
 async def on_avatar_autorig_success(client: AuthenticatedClient, avatar: AvatarPublic, node: hou.Node):
     """ sse handler. Do not do anything, just notify """
-    update_status(node, "Autorig successful. Avatar is now ready to use")
+    update_status(node, "Autorig successful. Requesting export, please wait...")
+    await export_avatar(client, avatar, node)
+
+async def on_avatar_export_success(client: AuthenticatedClient, avatar_export: AvatarExport, node: hou.Node):
+    """ sse handler """
+    update_status(node, "Received export processing success.")
+    output_directory = await download_exported_avatar(
+        client,
+        avatar_export,
+        Path(node.parm("tempdir").eval()),
+        node)
+    update_status(node, "Export downloaded. Unpacking and loading.")
+    # TODO set paths from export in scene.
+    return await load_exported_avatar(output_directory, node)
 
 async def download_export(client: AuthenticatedClient, export: Export, temp_dir: Path, node: hou.Node) -> Path:
     filename = temp_dir\
@@ -315,6 +415,31 @@ async def download_export(client: AuthenticatedClient, export: Export, temp_dir:
 
     return out_dir
 
+async def download_exported_avatar(
+        client: AuthenticatedClient,
+        avatar_export: AvatarExport,
+        temp_dir: Path,
+        node: hou.Node):
+    filename = temp_dir\
+        .joinpath(f"{avatar_export.avatar_id}")\
+        .with_suffix(Path(avatar_export.filepath).suffix)
+
+    out_dir = temp_dir\
+        .joinpath(f"{avatar_export.avatar_id}/extracted")
+
+    # Download content with explicit client get. This probably does not work in api?
+    result = await client.get_async_httpx_client().get(
+        url=f"{client._base_url}/avatar/{avatar_export.avatar_id}/download")
+
+    update_status(node, f"Download complete: {result}")
+    with open(filename, "wb") as f:
+        f.write(result.content)
+        update_status(node, f"Wrote {filename}")
+
+    shutil.unpack_archive(filename, out_dir)
+
+    return out_dir
+
 async def check_credits(client: AuthenticatedClient, node: hou.Node):
     result = await check_credit_balance_credit_balance_get.asyncio(
         client=client,
@@ -325,20 +450,25 @@ async def check_credits(client: AuthenticatedClient, node: hou.Node):
         result,
         title="Cairos credits")
 
+async def load_exported_avatar(output_directory: Path, node: hou.Node):
+    avatar_file = output_directory.joinpath(Path("output_autorig.fbx"))
+
+    if avatar_file:
+        node.node("retarget1").parm("fbxfile").set(str(avatar_file))
+
+    update_status(node, f"Loaded export assets: {avatar_file}. Done.")
+
 async def load_exported_files(output_directory: Path, node: hou.Node):
     retargeted = next(output_directory.glob("*retargeted*"))
-    sequencer = next(output_directory.glob("*sequencer*"))
 
-    if retargeted and sequencer:
-        node.node("retarget").parm("fbxfile").set(str(retargeted))
+    if retargeted:
         node.node("retarget1").parm("fbxfile").set(str(retargeted))
-        node.node("sequence").parm("fbxfile").set(str(sequencer))
 
     update_status(node, "Loaded export assets. Done.")
 
 async def on_animation_retarget_success(client: AuthenticatedClient, animation: OrmAnimation, node: hou.Node):
     update_status(node, f"Retarget successful! {animation}.\nTriggering export")
-    res = await send_export(client, thread_id=animation.job_thread, trigger_msg=animation.job_trigger, node=node)
+    res = await export_animation(client, thread_id=animation.job_thread, trigger_msg=animation.job_trigger, node=node)
     update_status(node, f"Export submitted: {res}")
 
 async def on_export_success(client: AuthenticatedClient, export: Export, node: hou.Node):
