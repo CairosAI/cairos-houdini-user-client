@@ -159,6 +159,14 @@ async def sse_handler(client: AuthenticatedClient, node: hou.Node):
 
     update_status(node, "Exiting sse loop")
 
+def sysopen(file: str):
+    if sys.platform == "win32":
+        os.system(f"start \"\" {file}")
+    elif sys.platform == "darwin":
+        os.system(f"open \"\" {file}")
+    else:
+        os.system(f"xdg-open {file}")
+
 async def send_chat(client: AuthenticatedClient, chat_thread: ChatThreadInList, prompt, node: hou.Node):
     """ Final result is received by sse, animation_success or animation_error.
     """
@@ -191,12 +199,7 @@ async def send_chat(client: AuthenticatedClient, chat_thread: ChatThreadInList, 
 
             if button_res == 0:
                 update_status(node, "Opening website")
-                if sys.platform == "win32":
-                    os.system(f"start \"\" https://cairos.outseta.com/profile?tab=planChange")
-                elif sys.platform == "darwin":
-                    os.system(f"open \"\" https://cairos.outseta.com/profile?tab=planChange")
-                else:
-                    os.system(f"xdg-open https://cairos.outseta.com/profile?tab=planChange")
+                sysopen("https://cairos.outseta.com/profile?tab=planChange")
 
             update_status(node, content["detail"])
 
@@ -375,12 +378,12 @@ async def on_sequencer_success(client: AuthenticatedClient, animation: OrmAnimat
 async def on_avatar_upload_success(client: AuthenticatedClient, avatar: AvatarPublic, node: hou.Node):
     """ sse handler """
     update_status(node, "Received upload processing success. Requesting export, please wait...")
-    await export_avatar(client, avatar, node)
+    await export_avatar(client, avatar.label, node)
 
 async def on_avatar_autorig_success(client: AuthenticatedClient, avatar: AvatarPublic, node: hou.Node):
     """ sse handler. Do not do anything, just notify """
     update_status(node, "Autorig successful. Requesting export, please wait...")
-    await export_avatar(client, avatar, node)
+    await export_avatar(client, avatar.label, node)
 
 async def on_avatar_export_success(client: AuthenticatedClient, avatar_export: AvatarExport, node: hou.Node):
     """ sse handler """
