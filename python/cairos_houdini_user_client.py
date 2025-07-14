@@ -550,11 +550,12 @@ async def handle_login(url, username, password, node):
             cookies=cookies,
             raise_on_unexpected_status=True)
 
+        node.setUserData("cairos_url", url)
+        node.setUserData("cairos_user", username)
+
         if client:
             node.setCachedUserData("cairos_client", client)
             update_status(node, "logged in")
-            node.setCachedUserData("cairos_url", url)
-            node.setCachedUserData("cairos_user", username)
 
             avatars = await get_avatars_avatar_get.asyncio(
                 client=client,
