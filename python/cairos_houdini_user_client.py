@@ -6,6 +6,7 @@ from pathlib import Path
 import shutil
 import json
 from typing import Any, Dict, List, Type, TypeVar, cast
+from datetime import datetime
 
 from cairos_python_lowlevel.cairos_python_lowlevel.models.avatar_public import AvatarPublic
 from cairos_python_lowlevel.cairos_python_lowlevel.models.body_post_avatar_avatar_uuid_upload_post import BodyPostAvatarAvatarUuidUploadPost
@@ -151,11 +152,14 @@ async def sse_handler(client: AuthenticatedClient, node: hou.Node):
                     node)
             elif evt.event == "animation_retarget_err":
                 update_status(node, f"Retarget error: {evt.data}")
+            elif evt.event == "usage_report":
+                update_status(node, evt.data)
             else:
                 if node.parm("debug_log").eval() and evt.event == "debug":
                     update_status(node, str(evt))
                 else:
-                    update_status(node, str(evt))
+                    # print irrelevant messages only in the console
+                    print(evt)
 
     update_status(node, "Exiting sse loop")
 
@@ -170,6 +174,7 @@ def sysopen(file: str):
 async def send_chat(client: AuthenticatedClient, chat_thread: ChatThreadInList, prompt, node: hou.Node):
     """ Final result is received by sse, animation_success or animation_error.
     """
+    clear_status(node)
     update_status(node, "Sending chat")
     try:
         response = await process_message_thread_thread_id_post.asyncio(
@@ -286,6 +291,7 @@ async def upload_avatar(
         node: hou.Node):
     """ Final result is received by sse, avatar_upload_success or avatar_upload_err.
     """
+    clear_status(node)
     update_status(node, f"Uploading avatar {avatar_name}")
     avatars = await get_avatars_avatar_get.asyncio(
         client=client,
@@ -470,7 +476,7 @@ async def load_exported_files(output_directory: Path, node: hou.Node):
     update_status(node, "Loaded export assets. Done.")
 
 async def on_animation_retarget_success(client: AuthenticatedClient, animation: OrmAnimation, node: hou.Node):
-    update_status(node, f"Retarget successful! {animation}.\nTriggering export")
+    update_status(node, f"Retarget successful! {animation.job_thread} {animation.job_trigger}.\nTriggering export")
     res = await export_animation(client, thread_id=animation.job_thread, trigger_msg=animation.job_trigger, node=node)
     update_status(node, f"Export submitted: {res}")
 
@@ -492,10 +498,17 @@ async def start_sse_listener(client: AuthenticatedClient, node: hou.Node):
 def update_status(node: hou.Node, status: str):
     q: deque | None = node.cachedUserData("status_queue")
     if q is None:
-        q = deque(maxlen=10)
+        q = deque(maxlen=5)
 
-    q.appendleft(status)
+    q.append(f"{datetime.now().isoformat()}: {status}")
+    print(status)
     return node.parm("status").set("\n".join([msg for msg in q]))
+
+def clear_status(node: hou.Node):
+    q: deque | None = node.cachedUserData("status_queue")
+    if q is not None:
+        q.clear()
+    return node.parm("status").set("")
 
 def on_exit(loop: asyncio.AbstractEventLoop):
     async def ashutdown(loop):
@@ -516,7 +529,7 @@ async def close_client(client: AuthenticatedClient, node: hou.Node):
 async def handle_login(url, username, password, node):
     # Here initialize asyncio loop
     try:
-        node.setCachedUserData("status_queue", deque(maxlen=10))
+        node.setCachedUserData("status_queue", deque(maxlen=5))
         node.parm("status").set("")
         unauth_client = Client(
             url,
