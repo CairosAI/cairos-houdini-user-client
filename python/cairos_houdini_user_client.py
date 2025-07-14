@@ -143,7 +143,7 @@ async def sse_handler(client: AuthenticatedClient, node: hou.Node):
                     client,
                     AvatarExport.from_dict(evt.json()),
                     node)
-            elif evt.event == "avatar_export_err":
+            elif evt.event == "avatar_export_error":
                 update_status(node, f"Export error: {evt.data}")
             elif evt.event == "animation_retarget_success":
                 await on_animation_retarget_success(
