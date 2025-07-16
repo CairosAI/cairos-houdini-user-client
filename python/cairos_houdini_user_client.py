@@ -22,6 +22,7 @@ import cairos_python_client
 
 from cairos_python_lowlevel.cairos_python_lowlevel.models.avatar_public import AvatarPublic
 from cairos_python_lowlevel.cairos_python_lowlevel.models.chat_input import ChatInput
+from cairos_python_lowlevel.cairos_python_lowlevel.models.chat_output import ChatOutput
 from cairos_python_lowlevel.cairos_python_lowlevel.models.chat_thread_in_list import ChatThreadInList
 from cairos_python_lowlevel.cairos_python_lowlevel.models.human_message import HumanMessage
 from cairos_python_lowlevel.cairos_python_lowlevel.models.orm_animation import OrmAnimation
@@ -175,6 +176,7 @@ async def send_chat(client: AuthenticatedClient, chat_thread: ChatThreadInList, 
     """ Final result is received by sse, animation_success or animation_error.
     """
     clear_status(node)
+    update_animation_status(node, "")
     update_status(node, "Sending chat")
     try:
         response = await process_message_thread_thread_id_post.asyncio(
@@ -191,6 +193,15 @@ async def send_chat(client: AuthenticatedClient, chat_thread: ChatThreadInList, 
         update_status(node, f"Chat response received. Waiting for animation sequence.")
         if node.parm("debug_log").eval():
             update_status(node, str(response))
+            print(response)
+        if isinstance(response, ChatOutput):
+            update_animation_status(
+                node,
+                f"{response.animation.description}\n" +
+                f"\n".join(map(
+                    lambda motion: f"{motion.sg_id:>10} | {motion.description}",
+                    response.animation.sequence)))
+
     except UnexpectedStatus as e:
         update_status(node, f"Request error: {e.status_code}")
         if e.status_code == 426:
@@ -503,6 +514,9 @@ def update_status(node: hou.Node, status: str):
     q.append(f"{datetime.now().isoformat()}: {status}")
     print(status)
     return node.parm("status").set("\n".join([msg for msg in q]))
+
+def update_animation_status(node: hou.Node, status: str):
+    return node.parm("animation_status").set(status)
 
 def clear_status(node: hou.Node):
     q: deque | None = node.cachedUserData("status_queue")
