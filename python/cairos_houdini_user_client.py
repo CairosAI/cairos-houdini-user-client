@@ -172,6 +172,10 @@ def sysopen(file: str):
     else:
         os.system(f"xdg-open {file}")
 
+def get_avatar_from_cache(node: hou.Node, avatar_name: str) -> AvatarPublic | None:
+    return next((avatar for avatar in node.cachedUserData("avatars") if avatar.label == avatar_name),
+                None)
+
 async def send_chat(client: AuthenticatedClient, chat_thread: ChatThreadInList, prompt, node: hou.Node):
     """ Final result is received by sse, animation_success or animation_error.
     """
@@ -239,12 +243,7 @@ async def send_retarget(
         trigger_msg: UUID,
         avatar_name: str,
         node: hou.Node):
-    avatars = await get_avatars_avatar_get.asyncio(
-        client=client,
-        outseta_nocode_access_token=client._cookies.get(cairos_python_client.token_cookie_name, ""))
-
-    assert avatars and not isinstance(avatars, HTTPValidationError), "Avatars are empty!"
-    avatar: AvatarPublic | None = next((a for a in avatars if a.label == avatar_name), None)
+    avatar: AvatarPublic | None = get_avatar_from_cache(node, avatar_name)
     if avatar is None:
         hou.ui.displayMessage(f"Avatar does not exist: {avatar_name}")
         return
@@ -262,11 +261,7 @@ async def autorig_avatar(client: AuthenticatedClient, avatar_name: str, node: ho
     """ Final result is received by sse, avatar_autorig_success or avatar_autorig_err.
     """
     try:
-        avatars = await get_avatars_avatar_get.asyncio(
-            client=client,
-            outseta_nocode_access_token=client._cookies.get(cairos_python_client.token_cookie_name, ""))
-        assert avatars and not isinstance(avatars, HTTPValidationError), "Avatars are empty!"
-        avatar: AvatarPublic | None = next((a for a in avatars if a.label == avatar_name), None)
+        avatar: AvatarPublic | None = get_avatar_from_cache(node, avatar_name)
         assert avatar, "Avatar not found"
         update_status(node, f"Sending autorig for {avatar_name}")
 
@@ -304,12 +299,7 @@ async def upload_avatar(
     """
     clear_status(node)
     update_status(node, f"Uploading avatar {avatar_name}")
-    avatars = await get_avatars_avatar_get.asyncio(
-        client=client,
-        outseta_nocode_access_token=client._cookies.get(cairos_python_client.token_cookie_name, ""))
-
-    assert avatars and not isinstance(avatars, HTTPValidationError), "Avatars are empty!"
-    avatar: AvatarPublic | None = next((a for a in avatars if a.label == avatar_name), None)
+    avatar: AvatarPublic | None = get_avatar_from_cache(node, avatar_name)
 
     if avatar is None:
         update_status(node, "Avatar was not found. Creating a new one.")
@@ -355,12 +345,7 @@ async def export_avatar(client: AuthenticatedClient, avatar_name: str, node: hou
     """
 
     try:
-        avatars = await get_avatars_avatar_get.asyncio(
-            client=client,
-            outseta_nocode_access_token=client._cookies.get(cairos_python_client.token_cookie_name, ""))
-
-        assert avatars and not isinstance(avatars, HTTPValidationError), "Avatars are empty!"
-        avatar: AvatarPublic | None = next((a for a in avatars if a.label == avatar_name), None)
+        avatar: AvatarPublic | None = get_avatar_from_cache(node, avatar_name)
         assert avatar, "Avatar not found"
         update_status(node, f"Sending autorig for {avatar_name}")
 
@@ -396,11 +381,15 @@ async def on_avatar_upload_success(client: AuthenticatedClient, avatar: AvatarPu
     """ sse handler """
     update_status(node, "Received upload processing success. Requesting export, please wait...")
     await export_avatar(client, avatar.label, node)
+    await reload_avatars_cache(client, node)
+    await update_avatar_status(client, node, avatar.label)
 
 async def on_avatar_autorig_success(client: AuthenticatedClient, avatar: AvatarPublic, node: hou.Node):
     """ sse handler. Do not do anything, just notify """
     update_status(node, "Autorig successful. Requesting export, please wait...")
     await export_avatar(client, avatar.label, node)
+    await reload_avatars_cache(client, node)
+    await update_avatar_status(client, node, avatar.label)
 
 async def on_avatar_export_success(client: AuthenticatedClient, avatar_export: AvatarExport, node: hou.Node):
     """ sse handler """
@@ -518,6 +507,21 @@ def update_status(node: hou.Node, status: str):
 def update_animation_status(node: hou.Node, status: str):
     return node.parm("animation_status").set(status)
 
+async def update_avatar_status(client: AuthenticatedClient, node: hou.Node, avatar_name: str):
+    avatar: AvatarPublic | None = get_avatar_from_cache(node, avatar_name)
+    if not avatar:
+        print(f"Avatar not found: {avatar_name}")
+        return
+
+    if avatar.status:
+        return node.parm("avatar_status").set(",".join(str(a) for a in avatar.status))
+
+async def reload_avatars_cache(client: AuthenticatedClient, node: hou.Node):
+    avatars = await get_avatars_avatar_get.asyncio(
+        client=client,
+        outseta_nocode_access_token=client._cookies.get(cairos_python_client.token_cookie_name, ""))
+    return node.setCachedUserData("avatars", avatars)
+
 def clear_status(node: hou.Node):
     q: deque | None = node.cachedUserData("status_queue")
     if q is not None:
@@ -571,11 +575,7 @@ async def handle_login(url, username, password, node):
             node.setCachedUserData("cairos_client", client)
             update_status(node, "logged in")
 
-            avatars = await get_avatars_avatar_get.asyncio(
-                client=client,
-                outseta_nocode_access_token=client._cookies.get(cairos_python_client.token_cookie_name, ""))
-            node.setCachedUserData("avatars", avatars)
-
+            await reload_avatars_cache(client, node)
             await start_sse_listener(client, node)
         else:
             update_status(node, "could not log in")
