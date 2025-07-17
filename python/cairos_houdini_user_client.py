@@ -195,6 +195,7 @@ async def send_chat(client: AuthenticatedClient, chat_thread: ChatThreadInList, 
             outseta_nocode_access_token=client._cookies.get(cairos_python_client.token_cookie_name, ""))
 
         update_status(node, f"Chat response received. Waiting for animation sequence.")
+
         if node.parm("debug_log").eval():
             update_status(node, str(response))
             print(response)
@@ -236,6 +237,25 @@ async def export_animation(client: AuthenticatedClient, thread_id: str, trigger_
         outseta_nocode_access_token=client._cookies.get(cairos_python_client.token_cookie_name, ""))
 
     update_status(node, "Export response received. Waiting for export to complete.")
+
+async def retarget_latest_animation(
+        client: AuthenticatedClient,
+        node: hou.Node,
+        avatar_name: str):
+    try:
+        animation: OrmAnimation | None = node.cachedUserData("latest_animation")
+        if not animation:
+            hou.ui.displayMessage("No animation found in cache")
+            return
+
+        return await send_retarget(
+            client,
+            animation.job_thread,
+            animation.job_trigger,
+            avatar_name,
+            node)
+    except:
+        hou.ui.displayMessage(traceback.format_exc())
 
 async def send_retarget(
         client: AuthenticatedClient,
@@ -364,18 +384,22 @@ async def on_sequencer_success(client: AuthenticatedClient, animation: OrmAnimat
     # trigger export
     # how to get context
     """ sse handler """
-    update_status(node, "Received sequencer success.")
-    if node.parm("retarget_animation").eval() == "retarget":
-        update_status(node, "Sending retarget request")
-        await send_retarget(
-            client,
-            animation.job_thread,
-            animation.job_trigger,
-            node.parm("avatar_to_retarget").eval(),
-            node)
-    else:
-        update_status(node, "Sending export request")
-        await export_animation(client, animation.job_thread, animation.job_trigger, node)
+    try:
+        update_status(node, "Received sequencer success.")
+        node.setCachedUserData("latest_animation", animation)
+        if node.parm("retarget_animation").eval() == "retarget":
+            update_status(node, "Sending retarget request")
+            await send_retarget(
+                client,
+                animation.job_thread,
+                animation.job_trigger,
+                node.parm("avatar_to_retarget").eval(),
+                node)
+        else:
+            update_status(node, "Sending export request")
+            await export_animation(client, animation.job_thread, animation.job_trigger, node)
+    except:
+        hou.ui.displayMessage(f"Error when processing sequence: {traceback.format_exc()}")
 
 async def on_avatar_upload_success(client: AuthenticatedClient, avatar: AvatarPublic, node: hou.Node):
     """ sse handler """
