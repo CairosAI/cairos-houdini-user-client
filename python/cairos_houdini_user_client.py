@@ -496,6 +496,7 @@ async def load_exported_files(output_directory: Path, node: hou.Node):
 
     if retargeted:
         node.node("retarget1").parm("fbxfile").set(str(retargeted))
+        node.node("retarget1").parm("reload").pressButton()
 
     update_status(node, "Loaded export assets. Done.")
 
