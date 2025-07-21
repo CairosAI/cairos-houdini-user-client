@@ -43,6 +43,7 @@ from cairos_python_lowlevel.cairos_python_lowlevel.api.default import (
     check_credit_balance_credit_balance_get,
     retarget_anim_anim_thread_id_trigger_msg_id_retarget_avatar_id_post,
     create_blank_avatar_avatar_new_label_post,
+    delete_avatar_route_avatar_uuid_delete,
     trigger_export_avatar_uuid_export_post)
 
 from cairos_python_lowlevel.cairos_python_lowlevel.errors import UnexpectedStatus
@@ -367,8 +368,6 @@ async def export_avatar(client: AuthenticatedClient, avatar_name: str, node: hou
     try:
         avatar: AvatarPublic | None = get_avatar_from_cache(node, avatar_name)
         assert avatar, "Avatar not found"
-        update_status(node, f"Sending autorig for {avatar_name}")
-
         update_status(node, f"Sending avatar export for {avatar.label}")
         await trigger_export_avatar_uuid_export_post.asyncio(
             uuid=avatar.id.hex,
@@ -379,6 +378,20 @@ async def export_avatar(client: AuthenticatedClient, avatar_name: str, node: hou
     except:
         update_status(node, traceback.format_exc())
 
+
+async def delete_avatar(client: AuthenticatedClient, node: hou.Node, avatar_name: str):
+    try:
+        avatar: AvatarPublic | None = get_avatar_from_cache(node, avatar_name)
+        assert avatar, "Avatar not found"
+        update_status(node, f"Deleting avatar {avatar_name}")
+        await delete_avatar_route_avatar_uuid_delete.asyncio(
+            uuid=str(avatar.id),
+            client=client,
+            outseta_nocode_access_token=client._cookies.get(cairos_python_client.token_cookie_name, ""))
+        update_status(node, "Deleted avatar")
+
+    except:
+        update_status(node, traceback.format_exc())
 
 async def on_sequencer_success(client: AuthenticatedClient, animation: OrmAnimation, node: hou.Node):
     # trigger export
