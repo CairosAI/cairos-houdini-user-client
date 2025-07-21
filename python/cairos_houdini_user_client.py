@@ -484,19 +484,19 @@ async def check_credits(client: AuthenticatedClient, node: hou.Node):
         title="Cairos credits")
 
 async def load_exported_avatar(output_directory: Path, node: hou.Node):
-    avatar_file = output_directory.joinpath(Path("output_autorig.fbx"))
+    avatar_file = output_directory.joinpath("output_autorig.bgeo.sc")
 
     if avatar_file:
-        node.node("retarget1").parm("fbxfile").set(str(avatar_file))
+        node.node("file1").parm("file").set(str(avatar_file))
 
     update_status(node, f"Loaded export assets: {avatar_file}. Done.")
 
 async def load_exported_files(output_directory: Path, node: hou.Node):
-    retargeted = next(output_directory.glob("*retargeted*"))
+    retargeted = output_directory.joinpath("output_full.bgeo.sc")
 
     if retargeted:
-        node.node("retarget1").parm("fbxfile").set(str(retargeted))
-        node.node("retarget1").parm("reload").pressButton()
+        node.node("file1").parm("file").set(str(retargeted))
+        node.node("file1").parm("reload").pressButton()
 
     update_status(node, "Loaded export assets. Done.")
 
