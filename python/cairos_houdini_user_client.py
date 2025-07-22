@@ -5,7 +5,7 @@ from collections import deque
 from pathlib import Path
 import shutil
 import json
-from typing import Any, Dict, List, Type, TypeVar, cast
+from typing import Any, Dict, List, Type, TypeVar, cast, AsyncGenerator
 from datetime import datetime
 
 from cairos_python_lowlevel.cairos_python_lowlevel.models.avatar_public import AvatarPublic
@@ -98,70 +98,75 @@ async def async_shutdown_tasks(loop: asyncio.AbstractEventLoop):
 
 async def sse_handler(client: AuthenticatedClient, node: hou.Node):
     update_status(node, f"Connecting to {client._base_url}/event_log")
-    async with httpx_sse.aconnect_sse(
-            client=client.get_async_httpx_client(),
-            method="GET",
-            url=f"{client._base_url}/event_log") as event_source:
-        async for evt in event_source.aiter_sse():
-            if evt.event == "animation_success":
-                update_status(node, "Animation success.")
-                await on_sequencer_success(
-                    client,
-                    OrmAnimation.from_dict(evt.json()),
-                    node)
-            elif evt.event == "animation_error":
-                update_status(node, "Animation error!")
-            elif evt.event == "export_success":
-                try:
-                    update_status(node, "Export success")
-                    await on_export_success(
+    try:
+        async with httpx_sse.aconnect_sse(
+                client=client.get_async_httpx_client(),
+                method="GET",
+                url=f"{client._base_url}/event_log") as event_source:
+            sse_iter = event_source.aiter_sse()
+            node.setCachedUserData("cairos_sse_iter", sse_iter)
+            async for evt in sse_iter:
+                if evt.event == "animation_success":
+                    update_status(node, "Animation success.")
+                    await on_sequencer_success(
                         client,
-                        Export.from_dict(evt.json()),
+                        OrmAnimation.from_dict(evt.json()),
                         node)
-                except:
-                    update_status(node, traceback.format_exc())
-            elif evt.event == "export_error":
-                update_status(node, "Export error")
+                elif evt.event == "animation_error":
+                    update_status(node, "Animation error!")
+                elif evt.event == "export_success":
+                    try:
+                        update_status(node, "Export success")
+                        await on_export_success(
+                            client,
+                            Export.from_dict(evt.json()),
+                            node)
+                    except:
+                        update_status(node, traceback.format_exc())
+                elif evt.event == "export_error":
+                    update_status(node, "Export error")
 
-            elif evt.event == "avatar_upload_success":
-                try:
-                    await on_avatar_upload_success(
+                elif evt.event == "avatar_upload_success":
+                    try:
+                        await on_avatar_upload_success(
+                            client,
+                            AvatarPublic.from_dict(evt.json()),
+                            node)
+                    except:
+                        update_status(node, traceback.format_exc())
+                elif evt.event == "avatar_upload_err":
+                    update_status(node, f"Avatar upload error: {evt.data}")
+                elif evt.event == "avatar_autorig_success":
+                    await on_avatar_autorig_success(
                         client,
                         AvatarPublic.from_dict(evt.json()),
                         node)
-                except:
-                    update_status(node, traceback.format_exc())
-            elif evt.event == "avatar_upload_err":
-                update_status(node, f"Avatar upload error: {evt.data}")
-            elif evt.event == "avatar_autorig_success":
-                await on_avatar_autorig_success(
-                    client,
-                    AvatarPublic.from_dict(evt.json()),
-                    node)
-            elif evt.event == "avatar_autorig_err":
-                update_status(node, f"Autorig error: {evt.data}")
-            elif evt.event == "avatar_export_success":
-                await on_avatar_export_success(
-                    client,
-                    AvatarExport.from_dict(evt.json()),
-                    node)
-            elif evt.event == "avatar_export_error":
-                update_status(node, f"Export error: {evt.data}")
-            elif evt.event == "animation_retarget_success":
-                await on_animation_retarget_success(
-                    client,
-                    OrmAnimation.from_dict(evt.json()),
-                    node)
-            elif evt.event == "animation_retarget_err":
-                update_status(node, f"Retarget error: {evt.data}")
-            elif evt.event == "usage_report":
-                update_status(node, evt.data)
-            else:
-                if node.parm("debug_log").eval() and evt.event == "debug":
-                    update_status(node, str(evt))
+                elif evt.event == "avatar_autorig_err":
+                    update_status(node, f"Autorig error: {evt.data}")
+                elif evt.event == "avatar_export_success":
+                    await on_avatar_export_success(
+                        client,
+                        AvatarExport.from_dict(evt.json()),
+                        node)
+                elif evt.event == "avatar_export_error":
+                    update_status(node, f"Export error: {evt.data}")
+                elif evt.event == "animation_retarget_success":
+                    await on_animation_retarget_success(
+                        client,
+                        OrmAnimation.from_dict(evt.json()),
+                        node)
+                elif evt.event == "animation_retarget_err":
+                    update_status(node, f"Retarget error: {evt.data}")
+                elif evt.event == "usage_report":
+                    update_status(node, evt.data)
                 else:
-                    # print irrelevant messages only in the console
-                    print(evt)
+                    if node.parm("debug_log").eval() and evt.event == "debug":
+                        update_status(node, str(evt))
+                    else:
+                        # print irrelevant messages only in the console
+                        print(evt)
+    except:
+        update_status(node, traceback.format_exc())
 
     update_status(node, "Exiting sse loop")
 
@@ -400,17 +405,8 @@ async def on_sequencer_success(client: AuthenticatedClient, animation: OrmAnimat
     try:
         update_status(node, "Received sequencer success.")
         node.setCachedUserData("latest_animation", animation)
-        if node.parm("retarget_animation").eval() == "retarget":
-            update_status(node, "Sending retarget request")
-            await send_retarget(
-                client,
-                animation.job_thread,
-                animation.job_trigger,
-                node.parm("avatar_to_retarget").eval(),
-                node)
-        else:
-            update_status(node, "Sending export request")
-            await export_animation(client, animation.job_thread, animation.job_trigger, node)
+        update_status(node, "Sending export request")
+        await export_animation(client, animation.job_thread, animation.job_trigger, node)
     except:
         hou.ui.displayMessage(f"Error when processing sequence: {traceback.format_exc()}")
 
@@ -531,7 +527,6 @@ async def on_export_success(client: AuthenticatedClient, export: Export, node: h
 
 async def start_sse_listener(client: AuthenticatedClient, node: hou.Node):
     await sse_handler(client, node)
-    update_status(node, f"Started sse handler with {client}")
 
 def update_status(node: hou.Node, status: str):
     q: deque | None = node.cachedUserData("status_queue")
@@ -580,7 +575,13 @@ async def close_client(client: AuthenticatedClient, node: hou.Node):
     if q:
         q.clear()
 
-    await client.get_async_httpx_client().aclose()
+    try:
+        sse_iter: AsyncGenerator | None = node.cachedUserData("cairos_sse_iter")
+        if sse_iter:
+            await sse_iter.aclose()
+        await client.get_async_httpx_client().aclose()
+    finally:
+        node.destroyCachedUserData("cairos_client")
 
 async def handle_login(url, username, password, node):
     # Here initialize asyncio loop
