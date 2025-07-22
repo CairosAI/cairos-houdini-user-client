@@ -188,6 +188,10 @@ async def send_chat(client: AuthenticatedClient, chat_thread: ChatThreadInList, 
     clear_status(node)
     update_animation_status(node, "")
     update_status(node, "Sending chat")
+    history = node.cachedUserData("cairos_history")
+    if history is None:
+        history = []
+
     try:
         response = await process_message_thread_thread_id_post.asyncio(
             thread_id=chat_thread.id,
@@ -196,7 +200,7 @@ async def send_chat(client: AuthenticatedClient, chat_thread: ChatThreadInList, 
                 prompt=HumanMessage(
                     id=uuid4().hex,
                     content=prompt),
-                history=[],
+                history=history,
                 btl_objs=[]),
             outseta_nocode_access_token=client._cookies.get(cairos_python_client.token_cookie_name, ""))
 
@@ -212,6 +216,7 @@ async def send_chat(client: AuthenticatedClient, chat_thread: ChatThreadInList, 
                 f"\n".join(map(
                     lambda motion: f"{motion.sg_id:>10} | {motion.description}",
                     response.animation.sequence)))
+            store_messages(node, response.messages)
 
     except UnexpectedStatus as e:
         update_status(node, f"Request error: {e.status_code}")
@@ -313,6 +318,7 @@ async def create_avatar(client: AuthenticatedClient, avatar_name: str, node: hou
 
     if isinstance(res, AvatarPublic):
         update_status(node, f"Avatar created: {res}")
+        await reload_avatars_cache(client, node)
     else:
         update_status(node, f"Error while creating avatar: {res}")
 
@@ -539,6 +545,12 @@ def update_status(node: hou.Node, status: str):
 
 def update_animation_status(node: hou.Node, status: str):
     return node.parm("animation_status").set(status)
+
+def store_messages(node: hou.Node, messages: list):
+    history = node.cachedUserData("cairos_history")
+    if history is None:
+        history = []
+    node.setCachedUserData("cairos_history", history + messages)
 
 async def update_avatar_status(client: AuthenticatedClient, node: hou.Node, avatar_name: str):
     avatar: AvatarPublic | None = get_avatar_from_cache(node, avatar_name)
