@@ -22,6 +22,9 @@ import cairos_python_client
 
 from cairos_python_lowlevel.cairos_python_lowlevel.models.avatar_public import AvatarPublic
 from cairos_python_lowlevel.cairos_python_lowlevel.models.chat_input import ChatInput
+from cairos_python_lowlevel.cairos_python_lowlevel.models.ai_message import AIMessage
+from cairos_python_lowlevel.cairos_python_lowlevel.models.stored_message import StoredMessage
+
 from cairos_python_lowlevel.cairos_python_lowlevel.models.chat_output import ChatOutput
 from cairos_python_lowlevel.cairos_python_lowlevel.models.chat_thread_in_list import ChatThreadInList
 from cairos_python_lowlevel.cairos_python_lowlevel.models.human_message import HumanMessage
@@ -200,23 +203,32 @@ async def send_chat(client: AuthenticatedClient, chat_thread: ChatThreadInList, 
                 prompt=HumanMessage(
                     id=uuid4().hex,
                     content=prompt),
-                history=history,
+                history=[m.data for m in history],
                 btl_objs=[]),
             outseta_nocode_access_token=client._cookies.get(cairos_python_client.token_cookie_name, ""))
 
-        update_status(node, f"Chat response received. Waiting for animation sequence.")
-
-        if node.parm("debug_log").eval():
-            update_status(node, str(response))
-            print(response)
         if isinstance(response, ChatOutput):
-            update_animation_status(
+            messages = list(map(lambda m: StoredMessage.from_dict(m),
+                                response.messages))
+            if response.animation:
+                update_status(node, f"Chat response received. Waiting for animation sequence.")
+                update_animation_status(
+                    node,
+                    f"{response.animation.description}\n" +
+                    f"\n".join(map(
+                        lambda motion: f"{motion.sg_id:>10} | {motion.description}",
+                        response.animation.sequence)))
+            else:
+                update_status(node, f"Chat response received.")
+
+            update_ai_status(
                 node,
-                f"{response.animation.description}\n" +
-                f"\n".join(map(
-                    lambda motion: f"{motion.sg_id:>10} | {motion.description}",
-                    response.animation.sequence)))
-            store_messages(node, response.messages)
+                "\n".join((str(m.data.content)
+                               for m in messages
+                           if isinstance(m.data, AIMessage))))
+
+            store_messages(node, messages)
+            print(f"Messages are: {response.messages}")
 
     except UnexpectedStatus as e:
         update_status(node, f"Request error: {e.status_code}")
@@ -236,7 +248,7 @@ async def send_chat(client: AuthenticatedClient, chat_thread: ChatThreadInList, 
             update_status(node, content["detail"])
 
     except Exception as e:
-        update_status(node, f"Request error: {e}")
+        update_status(node, f"Request error: {traceback.format_exc()}")
 
 async def export_animation(client: AuthenticatedClient, thread_id: str, trigger_msg: UUID, node: hou.Node):
     """ Final result is received by sse, export_success or export_error.
@@ -545,6 +557,9 @@ def update_status(node: hou.Node, status: str):
 
 def update_animation_status(node: hou.Node, status: str):
     return node.parm("animation_status").set(status)
+
+def update_ai_status(node: hou.Node, status: str):
+    return node.parm("ai_status").set(status)
 
 def store_messages(node: hou.Node, messages: list):
     history = node.cachedUserData("cairos_history")
