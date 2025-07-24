@@ -109,6 +109,9 @@ async def sse_handler(client: AuthenticatedClient, node: hou.Node):
             sse_iter = event_source.aiter_sse()
             node.setCachedUserData("cairos_sse_iter", sse_iter)
             async for evt in sse_iter:
+                if client.get_async_httpx_client().is_closed:
+                    break
+
                 if evt.event == "animation_success":
                     update_status(node, "Animation success.")
                     await on_sequencer_success(
@@ -169,9 +172,9 @@ async def sse_handler(client: AuthenticatedClient, node: hou.Node):
                         # print irrelevant messages only in the console
                         print(evt)
     except:
-        update_status(node, traceback.format_exc())
-
-    update_status(node, "Exiting sse loop")
+        print(traceback.format_exc())
+    finally:
+        update_status(node, "Exiting sse loop")
 
 def sysopen(file: str):
     if sys.platform == "win32":
@@ -603,11 +606,11 @@ async def close_client(client: AuthenticatedClient, node: hou.Node):
         q.clear()
 
     try:
-        sse_iter: AsyncGenerator | None = node.cachedUserData("cairos_sse_iter")
-        if sse_iter:
-            await sse_iter.aclose()
         await client.get_async_httpx_client().aclose()
+    except:
+        print(traceback.format_exc())
     finally:
+        node.destroyCachedUserData("cairos_sse_iter")
         node.destroyCachedUserData("cairos_client")
 
 async def handle_login(url, username, password, node):
