@@ -414,6 +414,7 @@ async def delete_avatar(client: AuthenticatedClient, node: hou.Node, avatar_name
             uuid=str(avatar.id),
             client=client,
             outseta_nocode_access_token=client._cookies.get(cairos_python_client.token_cookie_name, ""))
+        await reload_avatars_cache(client, node)
         update_status(node, "Deleted avatar")
 
     except:
