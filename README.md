@@ -1,9 +1,12 @@
 # Cairos Houdini user client
 
-Use [Cairos](https://app.cairos.ai) inside Houdini
+Use [Cairos](https://cairos.ai) inside Houdini
 
 ## Installing
-Make sure to have a system Python that is compatible with the Houdini Python. For Houdini 20.5 this is Python 3.11.
+Make sure to have a system Python that is compatible with the Houdini Python. For Houdini 20.5 this is Python 3.11. This can also be achieved with uv or anaconda. E.g. for uv:
+``` shell
+uv venv --python 3.11
+```
 
 Clone the repo, then get the dependencies
 ``` shell
@@ -33,7 +36,7 @@ The script
 
 ![Cairos HDA](./screenshot-cairos-hda.png)
 
-In Houdini, you can add a node `Cairos Houdini user client`.
+In Houdini, you can add a Geometry node `Cairos Houdini user client`.
 
 Go to the Settings tab and click login. Enter the Cairos address you will be using, your username and password. The public address is https://app.cairos.ai/api
 
@@ -51,11 +54,11 @@ You start with an animation, that you obtain by chatting with the agent and gett
 
 This animation uses a default avatar, which is processed fast. This permits iterating to refine the animation with further prompts.
 
-You can retarget this animation *later* youself, or you can use Cairos's retargeting, using an existing avatar.
-
-Finally you export the animation, so that all artifacts are packaged and downloaded to your machine, then loaded in the Cairos HDA.
+Once the sequence is completed, it is exported, downloaded locally, and loaded in Houdini.
 
 ### Managing avatars
-Currently you can only *upload* avatars from the Cairos HDA. More to come.
+You can upload, autorig, export, and delete avatars from the HDA.
 
-You can either select an existing avatar from the list, or enter the name for a new one in "Character name". Link to the desired geometry in the "Character skin SOP parameter".
+You can select an existing avatar from the list, or enter the name for a new one in "Character name", then upload you selected geometry from "Character skin SOP" to it.
+
+When uploading or autorigging a character, it is automatically exported, downloaded locally, and loaded in Houdini.
