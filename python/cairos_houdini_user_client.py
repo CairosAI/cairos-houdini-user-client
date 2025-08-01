@@ -435,15 +435,15 @@ async def on_sequencer_success(client: AuthenticatedClient, animation: OrmAnimat
 async def on_avatar_upload_success(client: AuthenticatedClient, avatar: AvatarPublic, node: hou.Node):
     """ sse handler """
     update_status(node, "Received upload processing success. Requesting export, please wait...")
-    await export_avatar(client, avatar.label, node)
     await reload_avatars_cache(client, node)
+    await export_avatar(client, avatar.label, node)
     await update_avatar_status(client, node, avatar.label)
 
 async def on_avatar_autorig_success(client: AuthenticatedClient, avatar: AvatarPublic, node: hou.Node):
     """ sse handler. Do not do anything, just notify """
     update_status(node, "Autorig successful. Requesting export, please wait...")
-    await export_avatar(client, avatar.label, node)
     await reload_avatars_cache(client, node)
+    await export_avatar(client, avatar.label, node)
     await update_avatar_status(client, node, avatar.label)
 
 async def on_avatar_export_success(client: AuthenticatedClient, avatar_export: AvatarExport, node: hou.Node):
