@@ -41,6 +41,7 @@ from cairos_python_lowlevel.cairos_python_lowlevel.api.default import (
     post_avatar_avatar_uuid_upload_post,
     get_avatars_avatar_get,
     trigger_autorig_avatar_uuid_autorig_post,
+    update_avatar_mapping_llm_avatar_uuid_llm_mapping_patch,
     create_blank_avatar_avatar_new_label_post,
     login_outseta_login_post,
     check_credit_balance_credit_balance_get,
@@ -149,6 +150,13 @@ async def sse_handler(client: AuthenticatedClient, node: hou.Node):
                         node)
                 elif evt.event == "avatar_autorig_err":
                     update_status(node, f"Autorig error: {evt.data}")
+                elif evt.event == "avatar_mapping_success":
+                    await on_avatar_mapping_success(
+                        client,
+                        AvatarPublic.from_dict(evt.json()),
+                        node)
+                elif evt.event == "avatar_mapping_err":
+                    update_status(node, f"Mapping error: {evt.data}")
                 elif evt.event == "avatar_export_success":
                     await on_avatar_export_success(
                         client,
@@ -320,6 +328,19 @@ async def autorig_avatar(client: AuthenticatedClient, avatar_name: str, node: ho
     except Exception as e:
         update_status(node, f"Error when requesting autorig: {e}")
 
+async def llm_map_avatar(client: AuthenticatedClient, avatar_name: str, node: hou.Node):
+    try:
+        avatar: AvatarPublic | None = get_avatar_from_cache(node, avatar_name)
+        assert avatar, "Avatar not found"
+        update_status(node, f"Sending autorig for {avatar_name}")
+
+        await update_avatar_mapping_llm_avatar_uuid_llm_mapping_patch.asyncio(
+            uuid=avatar.id.hex,
+            client=client,
+            outseta_nocode_access_token=client._cookies.get(cairos_python_client.token_cookie_name, ""))
+    except Exception as e:
+        update_status(node, f"Error when requesting automapping: {e}")
+
 async def create_avatar(client: AuthenticatedClient, avatar_name: str, node: hou.Node):
     update_status(node, f"Creating avatar {avatar_name}")
     try:
@@ -442,6 +463,13 @@ async def on_avatar_upload_success(client: AuthenticatedClient, avatar: AvatarPu
 async def on_avatar_autorig_success(client: AuthenticatedClient, avatar: AvatarPublic, node: hou.Node):
     """ sse handler. Do not do anything, just notify """
     update_status(node, "Autorig successful. Requesting export, please wait...")
+    await reload_avatars_cache(client, node)
+    await export_avatar(client, avatar.label, node)
+    await update_avatar_status(client, node, avatar.label)
+
+async def on_avatar_mapping_success(client: AuthenticatedClient, avatar: AvatarPublic, node: hou.Node):
+    """ sse handler. Do not do anything, just notify """
+    update_status(node, "Mapping successful. Requesting export, please wait...")
     await reload_avatars_cache(client, node)
     await export_avatar(client, avatar.label, node)
     await update_avatar_status(client, node, avatar.label)
