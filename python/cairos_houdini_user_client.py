@@ -24,6 +24,7 @@ from cairos_python_lowlevel.cairos_python_lowlevel.models.avatar_public import A
 from cairos_python_lowlevel.cairos_python_lowlevel.models.chat_input import ChatInput
 from cairos_python_lowlevel.cairos_python_lowlevel.models.ai_message import AIMessage
 from cairos_python_lowlevel.cairos_python_lowlevel.models.stored_message import StoredMessage
+from cairos_python_lowlevel.cairos_python_lowlevel.models.stored_message_type import StoredMessageType
 
 from cairos_python_lowlevel.cairos_python_lowlevel.models.chat_output import ChatOutput
 from cairos_python_lowlevel.cairos_python_lowlevel.models.chat_thread_in_list import ChatThreadInList
@@ -200,20 +201,24 @@ async def send_chat(client: AuthenticatedClient, chat_thread: ChatThreadInList, 
     """ Final result is received by sse, animation_success or animation_error.
     """
     clear_status(node)
+    clear_chat(node)
     update_animation_status(node, "")
+
     update_status(node, "Sending chat")
     history = node.cachedUserData("cairos_history")
     if history is None:
         history = []
 
     try:
+        prompt_message = HumanMessage(
+            id=uuid4().hex,
+            content=prompt)
+
         response = await process_message_thread_thread_id_post.asyncio(
             thread_id=chat_thread.id,
             client=client,
             body=ChatInput(
-                prompt=HumanMessage(
-                    id=uuid4().hex,
-                    content=prompt),
+                prompt=prompt_message,
                 history=[m.data for m in history],
                 btl_objs=[]),
             outseta_nocode_access_token=client._cookies.get(cairos_python_client.token_cookie_name, ""))
@@ -232,13 +237,20 @@ async def send_chat(client: AuthenticatedClient, chat_thread: ChatThreadInList, 
             else:
                 update_status(node, f"Chat response received.")
 
-            update_ai_status(
-                node,
-                "\n".join((str(m.data.content)
-                               for m in messages
-                           if isinstance(m.data, AIMessage))))
+            messages.insert(
+                0,
+                StoredMessage(
+                    type_=StoredMessageType.HUMAN,
+                    data=prompt_message))
 
-            store_messages(node, messages)
+            update_chat_display_messages(
+                node,
+                [m.data
+                 for m in messages
+                 if ((isinstance(m.data, AIMessage) or isinstance(m.data, HumanMessage))
+                     and m.data.content)])
+
+            update_chat_history(node, messages)
             print(f"Messages are: {response.messages}")
 
     except UnexpectedStatus as e:
@@ -590,10 +602,24 @@ def update_status(node: hou.Node, status: str):
 def update_animation_status(node: hou.Node, status: str):
     return node.parm("animation_status").set(status)
 
-def update_ai_status(node: hou.Node, status: str):
-    return node.parm("ai_status").set(status)
+def update_chat_display_messages(node: hou.Node, messages: list[HumanMessage | AIMessage]):
+    """ Pushes messages on a queue.
+    This is meant for visualization in the hda interface, in contrast to chat history.
+    It only contains human and ai messages.
+    """
+    chat_queue: deque | None = node.cachedUserData("chat_queue")
+    username = node.userData("cairos_user")
+    if chat_queue is None:
+        chat_queue = deque(maxlen=10)
+        node.setCachedUserData("chat_queue", chat_queue)
 
-def store_messages(node: hou.Node, messages: list):
+    chat_queue.extend([f"{datetime.now().isoformat()} [{'ai' if msg.type_ == StoredMessageType.AI else username}]: {msg.content}" for msg in messages if msg != ""])
+    return node.parm("chat_display_messages").set("\n".join(msg for msg in chat_queue))
+
+def update_chat_history(node: hou.Node, messages: list[StoredMessage]):
+    """ Keeps messages in a list, which gets sent
+    with chat requests. This provides the "history" functionality of chat.
+    """
     history = node.cachedUserData("cairos_history")
     if history is None:
         history = []
@@ -620,6 +646,18 @@ def clear_status(node: hou.Node):
         q.clear()
     return node.parm("status").set("")
 
+def clear_chat(node: hou.Node):
+    chat_queue: deque | None = node.cachedUserData("chat_queue")
+    if chat_queue is not None:
+        chat_queue.clear()
+    return node.parm("chat_display_messages").set("")
+
+def clear(node: hou.Node):
+    node.parm("prompt").set("")
+    clear_status(node)
+    clear_chat(node)
+    update_animation_status(node, "")
+
 def on_exit(loop: asyncio.AbstractEventLoop):
     async def ashutdown(loop):
         tasks = [task for task in asyncio.all_tasks(loop) if task is not
@@ -631,8 +669,11 @@ def on_exit(loop: asyncio.AbstractEventLoop):
 
 async def close_client(client: AuthenticatedClient, node: hou.Node):
     q: deque | None = node.cachedUserData("status_queue")
+    cq: deque | None = node.cachedUserData("chat_queue")
     if q:
         q.clear()
+    if cq:
+        cq.clear()
 
     try:
         await client.get_async_httpx_client().aclose()
@@ -646,6 +687,7 @@ async def handle_login(url, username, password, node):
     # Here initialize asyncio loop
     try:
         node.setCachedUserData("status_queue", deque(maxlen=5))
+        node.setCachedUserData("chat_queue", deque(maxlen=10))
         node.parm("status").set("")
         unauth_client = Client(
             url,
