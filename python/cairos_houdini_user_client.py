@@ -200,8 +200,6 @@ def get_avatar_from_cache(node: hou.Node, avatar_name: str) -> AvatarPublic | No
 async def send_chat(client: AuthenticatedClient, chat_thread: ChatThreadInList, prompt, node: hou.Node):
     """ Final result is received by sse, animation_success or animation_error.
     """
-    clear_status(node)
-    clear_chat(node)
     update_animation_status(node, "")
 
     update_status(node, "Sending chat")
@@ -505,6 +503,8 @@ async def download_export(client: AuthenticatedClient, export: Export, temp_dir:
 
     out_dir = temp_dir\
         .joinpath(f"{export.job_thread}_{export.job_trigger}/extracted")
+    if not out_dir.exists():
+        out_dir.mkdir(parents=True, exist_ok=True)
 
     # Download content with explicit client get. This probably does not work in api?
     result = await client.get_async_httpx_client().get(
@@ -530,6 +530,9 @@ async def download_exported_avatar(
 
     out_dir = temp_dir\
         .joinpath(f"{avatar_export.avatar_id}/extracted")
+
+    if not out_dir.exists():
+        out_dir.mkdir(parents=True, exist_ok=True)
 
     # Download content with explicit client get. This probably does not work in api?
     result = await client.get_async_httpx_client().get(
@@ -558,16 +561,16 @@ async def load_exported_avatar(output_directory: Path, node: hou.Node):
     avatar_file = output_directory.joinpath("output_autorig.bgeo.sc")
 
     if avatar_file:
-        node.node("file1").parm("file").set(str(avatar_file))
+        node.node("file_character").parm("file").set(str(avatar_file))
 
     update_status(node, f"Loaded export assets: {avatar_file}. Done.")
 
-async def load_exported_files(output_directory: Path, node: hou.Node):
+async def load_exported_animation(output_directory: Path, node: hou.Node):
     retargeted = output_directory.joinpath("output_full.bgeo.sc")
 
     if retargeted:
-        node.node("file1").parm("file").set(str(retargeted))
-        node.node("file1").parm("reload").pressButton()
+        node.node("file_animation").parm("file").set(str(retargeted))
+        node.node("file_animation").parm("reload").pressButton()
 
     update_status(node, "Loaded export assets. Done.")
 
@@ -585,7 +588,7 @@ async def on_export_success(client: AuthenticatedClient, export: Export, node: h
     output_directory = await download_export(client, export, Path(node.parm("tempdir").eval()), node)
     update_status(node, "Export downloaded. Unpacking and loading.")
     # TODO set paths from export in scene.
-    return await load_exported_files(output_directory, node)
+    return await load_exported_animation(output_directory, node)
 
 async def start_sse_listener(client: AuthenticatedClient, node: hou.Node):
     await sse_handler(client, node)
