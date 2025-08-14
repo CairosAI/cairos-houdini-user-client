@@ -3,11 +3,11 @@
     "env": [
         { "PYTHONPATH": [{
             "method": "append",
-            "value": "{{ plugin_dest }}\\python"
+            "value": "{{ plugin_dest }}/python"
         }, {
             "method": "append",
-            "value": "{{ venv_path }}\\Lib\\site-packages"
+            "value": "{{ venv_path }}/Lib/site-packages"
         }]},
-        { "HOUDINI_OTLSCAN_PATH": "{{ plugin_dest }}\\hda"}
+        { "HOUDINI_OTLSCAN_PATH": "{{ plugin_dest }}/hda"}
     ]
 }

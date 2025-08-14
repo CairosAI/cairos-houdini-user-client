@@ -13,11 +13,12 @@ if (-not $venv_path) { $venv_path = $venv_path_default }
 
 $package_dest = Join-Path -Path $houdini_path -ChildPath "\packages\cairos_user.json"
 
-Get-Content ./cairos_inst_windows.json | ForEach-Object {$_ -replace "{{ plugin_dest }}", $plugin_dest}| ForEach-Object {$_ -replace "{{ venv_path }}", $venv_path} | Set-Content $package_dest
+Get-Content ./cairos_inst_windows.json | ForEach-Object {$_ -replace "{{ plugin_dest }}", $plugin_dest}| ForEach-Object {$_ -replace "{{ venv_path }}", $venv_path} | ForEach-Object {$_ -replace "\\", "/"} | Set-Content $package_dest
 # cp ./cairos_inst.json $package_dest
-cp . $plugin_dest
+if (-Not (Test-Path $plugin_dest)) { md -Path $plugin_dest }
+cp -Path ".\*" -Destination $plugin_dest -Recurse
 
 python -m venv $venv_path
-"$venv_path\Scripts\activate.ps1"
+& "$venv_path\Scripts\activate.ps1"
 
 pip install -r ./requirements.txt
