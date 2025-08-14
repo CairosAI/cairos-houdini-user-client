@@ -1,4 +1,4 @@
-$plugin_dest_default = "c:\Program Files\Common Files\houdini_plugins\cairos-houdini-user-client"
+$plugin_dest_default = "c:\Program Files\Common Files\Houdini\cairos-houdini-user-client"
 $houdini_path_default = "c:\Program Files\Houdini20.5.510"
 $venv_path_default = Join-Path -Path $env:LocalAppData -ChildPath "\cairos\venvs\cairos"
 
