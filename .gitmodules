@@ -1,6 +1,6 @@
 [submodule "cairos-types"]
 	path = deps/cairos-types
-	url = git@github.com:CairosAI/cairos-types.git
+	url = https://github.com/CairosAI/cairos-types.git
 [submodule "cairos-python-client"]
 	path = deps/cairos-python-client
-	url = git@github.com:CairosAI/cairos-python-client.git
+	url = https://github.com/CairosAI/cairos-python-client.git
