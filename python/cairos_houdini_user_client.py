@@ -5,7 +5,7 @@ from collections import deque
 from pathlib import Path
 import shutil
 import json
-from typing import Any, Dict, List, Type, TypeVar, cast, AsyncGenerator
+from typing import Any, Dict, List, Tuple, Type, TypeVar, cast, AsyncGenerator
 from datetime import datetime
 
 from cairos_python_lowlevel.cairos_python_lowlevel.models.avatar_public import AvatarPublic
@@ -39,6 +39,8 @@ from cairos_python_lowlevel.cairos_python_lowlevel.api.default import (
     export_anim_anim_thread_id_trigger_msg_id_export_post,
     post_avatar_avatar_uuid_upload_post,
     get_avatars_avatar_get,
+    get_avatar_avatar_uuid_get,
+    get_anim_anim_thread_id_trigger_msg_id_get,
     trigger_autorig_avatar_uuid_autorig_post,
     update_avatar_mapping_llm_avatar_uuid_llm_mapping_patch,
     create_blank_avatar_avatar_new_label_post,
@@ -508,11 +510,26 @@ async def on_avatar_export_success(client: AuthenticatedClient, avatar_export: A
     return await load_exported_avatar(output_directory, node)
 
 async def download_export(client: AuthenticatedClient, export: Export, temp_dir: Path, node: hou.Node) -> Path:
-    filename = temp_dir\
+    time_string = datetime.now().isoformat()
+    animation: OrmAnimation | HTTPValidationError | None = await get_anim_anim_thread_id_trigger_msg_id_get.asyncio(
+        client=client,
+        thread_id=export.job_thread,
+        trigger_msg_id=export.job_trigger.hex,
+        outseta_nocode_access_token=client._cookies.get(cairos_python_client.token_cookie_name, ""))
+
+    # This shouldn't ever fail
+    assert isinstance(animation, OrmAnimation), f"Animation for export was not found: {export}"
+    time_and_name = "_".join((time_string, animation.nice_name or ""))
+    base_dir = temp_dir\
+        .joinpath("animations")\
+        .joinpath(time_and_name)
+
+
+    filename = base_dir\
         .joinpath(f"{export.job_thread}_{export.job_trigger}")\
         .with_suffix(Path(export.filepath).suffix)
 
-    out_dir = temp_dir\
+    out_dir = base_dir\
         .joinpath(f"{export.job_thread}_{export.job_trigger}/extracted")
     if not out_dir.exists():
         out_dir.mkdir(parents=True, exist_ok=True)
@@ -528,6 +545,11 @@ async def download_export(client: AuthenticatedClient, export: Export, temp_dir:
 
     shutil.unpack_archive(filename, out_dir)
 
+    downloads = node.cachedUserData("downloaded_animations")
+    downloads.append((time_and_name, out_dir))
+    node.setCachedUserData("downloaded_animations", downloads)
+    node.parm("select_exported_animation").set(time_and_name)
+
     return out_dir
 
 async def download_exported_avatar(
@@ -535,11 +557,23 @@ async def download_exported_avatar(
         avatar_export: AvatarExport,
         temp_dir: Path,
         node: hou.Node):
-    filename = temp_dir\
+    time_string = datetime.now().isoformat()
+    avatar: AvatarPublic | HTTPValidationError | None = await get_avatar_avatar_uuid_get.asyncio(
+        uuid=avatar_export.avatar_id.hex,
+        client=client,
+        outseta_nocode_access_token=client._cookies.get(cairos_python_client.token_cookie_name, ""))
+
+    assert isinstance(avatar, AvatarPublic), f"Avatar for export not found: {avatar_export}"
+    time_and_name = "_".join((time_string, avatar.label))
+    base_dir = temp_dir\
+        .joinpath("avatars")\
+        .joinpath(time_and_name)
+
+    filename = base_dir\
         .joinpath(f"{avatar_export.avatar_id}")\
         .with_suffix(Path(avatar_export.filepath).suffix)
 
-    out_dir = temp_dir\
+    out_dir = base_dir\
         .joinpath(f"{avatar_export.avatar_id}/extracted")
 
     if not out_dir.exists():
@@ -555,6 +589,11 @@ async def download_exported_avatar(
         update_status(node, f"Wrote {filename}")
 
     shutil.unpack_archive(filename, out_dir)
+
+    downloads = node.cachedUserData("downloaded_avatars")
+    downloads.append((time_and_name, out_dir))
+    node.setCachedUserData("downloaded_avatars", downloads)
+    node.parm("select_exported_avatar").set(time_and_name)
 
     return out_dir
 
@@ -596,7 +635,11 @@ async def on_export_success(client: AuthenticatedClient, export: Export, node: h
     # use contents
     """ sse handler """
     update_status(node, "Export successful. Downloading export artifacts.")
-    output_directory = await download_export(client, export, Path(node.parm("tempdir").eval()), node)
+    output_directory = await download_export(
+        client,
+        export,
+        Path(node.parm("tempdir").eval()),
+        node)
     update_status(node, "Export downloaded. Unpacking and loading.")
     # TODO set paths from export in scene.
     return await load_exported_animation(output_directory, node)
@@ -706,11 +749,36 @@ async def close_client(client: AuthenticatedClient, node: hou.Node):
         node.destroyCachedUserData("cairos_sse_iter")
         node.destroyCachedUserData("cairos_client")
 
+def parse_existing_downloads(temp_dir: Path) -> list[tuple[str, str]]:
+    downloads = []
+    for sub in temp_dir.iterdir():
+        download_file = next(sub.glob("**/output_full.bgeo.sc"), None)
+        if download_file:
+            downloads.append((sub.name, download_file.parent))
+
+    return downloads
+
+def parse_existing_avatar_downloads(temp_dir: Path) -> list[tuple[str, str]]:
+    downloads = []
+    for sub in temp_dir.iterdir():
+        download_file = next(sub.glob("**/output_autorig.bgeo.sc"), None)
+        if download_file:
+            downloads.append((sub.name, download_file.parent))
+
+    return downloads
+
 async def handle_login(url, username, password, node):
     # Here initialize asyncio loop
     try:
         node.setCachedUserData("status_queue", deque(maxlen=5))
         node.setCachedUserData("chat_queue", deque(maxlen=10))
+        node.setCachedUserData(
+            "downloaded_animations",
+            parse_existing_downloads(Path(node.parm("tempdir").eval())))
+        node.setCachedUserData(
+            "downloaded_avatars",
+            parse_existing_avatar_downloads(Path(node.parm("tempdir").eval())))
+
         node.parm("status").set("")
         unauth_client = Client(
             url,
