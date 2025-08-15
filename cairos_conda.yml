@@ -1,0 +1,7 @@
+name: cairos
+dependencies:
+  - python==3.11
+  - anaconda
+  - pip
+  - pip:
+      - -r requirements.txt
