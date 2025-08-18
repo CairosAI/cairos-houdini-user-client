@@ -510,7 +510,9 @@ async def on_avatar_export_success(client: AuthenticatedClient, avatar_export: A
     return await load_exported_avatar(output_directory, node)
 
 async def download_export(client: AuthenticatedClient, export: Export, temp_dir: Path, node: hou.Node) -> Path:
-    time_string = datetime.now().isoformat()
+    """ Note: on windows mkdir does not allow paths will colon in them
+    """
+    time_string = datetime.now().isoformat().replace(":", "_")
     animation: OrmAnimation | HTTPValidationError | None = await get_anim_anim_thread_id_trigger_msg_id_get.asyncio(
         client=client,
         thread_id=export.job_thread,
@@ -543,6 +545,10 @@ async def download_export(client: AuthenticatedClient, export: Export, temp_dir:
         f.write(result.content)
         update_status(node, f"Wrote {filename}")
 
+    if sys.platform == "win32":
+        # on Windows, long paths need this prefix to work (with some operations)
+        filename = "\\\\?\\" + str(filename)
+
     shutil.unpack_archive(filename, out_dir)
 
     downloads = node.cachedUserData("downloaded_animations")
@@ -557,7 +563,7 @@ async def download_exported_avatar(
         avatar_export: AvatarExport,
         temp_dir: Path,
         node: hou.Node):
-    time_string = datetime.now().isoformat()
+    time_string = datetime.now().isoformat().replace(":", "_")
     avatar: AvatarPublic | HTTPValidationError | None = await get_avatar_avatar_uuid_get.asyncio(
         uuid=avatar_export.avatar_id.hex,
         client=client,
@@ -587,6 +593,10 @@ async def download_exported_avatar(
     with open(filename, "wb") as f:
         f.write(result.content)
         update_status(node, f"Wrote {filename}")
+
+    if sys.platform == "win32":
+        # on Windows, long paths need this prefix to work (with some operations)
+        filename = "\\\\?\\" + str(filename)
 
     shutil.unpack_archive(filename, out_dir)
 
