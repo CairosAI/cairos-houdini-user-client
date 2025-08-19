@@ -11,6 +11,18 @@ package_dest=${package_dest:-${package_dest_default}}
 read -p "Venv to install python dependencies in [${venv_path_default}] " venv_path
 venv_path=${venv_path:-${venv_path_default}}
 
+if [ ! -d ${plugin_dest} ]; then
+    mkdir ${plugin_dest}
+fi
+
+if [ ! -d ${venv_path} ]; then
+    mkdir ${venv_path}
+fi
+
+if [ ! -d $(dirname ${package_dest}) ]; then
+    mkdir $(dirname ${venv_path})
+fi
+
 # cp ./cairos_inst.json ${package_dest}
 sed -e "s@{{ plugin_dest }}@${plugin_dest}@g" -e "s@{{ venv_path }}@${venv_path}@g" ./cairos_inst.json | tee ${package_dest}
 

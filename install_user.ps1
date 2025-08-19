@@ -11,6 +11,11 @@ if (-not $venv_path) { $venv_path = $venv_path_default }
 $package_dest = Read-Host "Package file location [${package_dest_default}] "
 if (-not $package_dest) { $package_dest = $package_dest_default }
 
+$package_dir = (Get-Item $package_dest).parent
+if (-Not (Test-Path $package_dir)) { md -Path $package_dir }
+
+if (-Not (Test-Path $venv_path)) { md -Path $venv_path }
+
 Get-Content ./cairos_inst_windows.json | ForEach-Object {$_ -replace "{{ plugin_dest }}", $plugin_dest}| ForEach-Object {$_ -replace "{{ venv_path }}", $venv_path} | ForEach-Object {$_ -replace "\\", "/"} | Set-Content $package_dest
 # cp ./cairos_inst.json $package_dest
 if (-Not (Test-Path $plugin_dest)) { md -Path $plugin_dest }
