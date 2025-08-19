@@ -13,25 +13,117 @@ Clone the repo, then get the dependencies
 git submodule update --init
 ```
 
+There are two primary ways of installing plugins in Houdini - user-specific, and "global" usually employed by studios. The global installation requires administrative privileges, and might require more effort.
+
 ### With the provided installation scripts
 These scripts should cover most regular use cases.
 
-Linux:
+Linux studio:
 ```
 ./install.sh
 ```
 
-Windows:
+Linux user:
+```
+./install_user.sh
+```
+
+Windows studio:
 ```
 ./install.ps1
 ```
 
-The script will prompt you for the location to copy the plugin to, the location of Houdini, the location of a virtual environment, containing some needed dependencies.
+Windows user:
+```
+./install_user.ps1
+```
+
+The script will prompt you for some locations that you can adjust to your preference and system specifics.
 
 ### Manually
 The installation scripts may not cover your setup, or they may fail. In this case running things manually step by step might be clearer.
 
-#### Windows
+#### User
+A user installation does not require elevated privileges to perform.
+By default Houdini reads plugins from `$HOUDINI_USER_PREF_DIR`, which is usually in `$HOME/houdiniX.XX`.
+
+##### Windows
+On Windows the user prefs directory is e.g. `c:\Users\username\Documents\houdini20.5` (adjusted for Houdini version, not including build number).
+
+You could place everything under your home directory, where you have unlimited access:
+``` powershell
+$plugin_dest = "c:\Users\yourusername\Documents\cairos\cairos-houdini-user-client"
+$venv_path = "c:\Users\yourusername\Documents\cairos\venvs\cairos"
+$package_dest = "c:\Users\yourusername\Documents\houdini20.5\packages\cairos_user.json"
+```
+
+###### Clone the plugin directly into `$plugin_dest` or copy it there
+Let's say we clone it directly in the destination:
+``` powershell
+mkdir "c:\Users\yourusername\Documents\cairos"
+cd "c:\Users\yourusername\Documents\cairos"
+git clone git@github.com:CairosAI/cairos-houdini-user-client.git
+cd cairos-houdini-user-client
+git submodule update --init
+```
+
+###### Copy the json package file to Houdini's user preferences directory
+``` powershell
+cp $plugin_dest\cairos_inst_windows.json $package_dest
+```
+Open up the newly copied file in a text editor, and replace the curly brace placeholders with the correct paths - `{{ plugin_dest }}`, `{{venv_path }}`.
+
+###### Create a Python virtual environment and install the dependencies
+You could use the `venv_path` above, or adjust to your liking.
+
+``` powershell
+cd $plugin_dest
+python -m venv $venv_path
+$venv_path\Scripts\activate.ps1
+python -m pip install ./requirements.txt
+```
+
+##### Linux
+On Linux the user prefs directory is `$HOME/houdini20.5`.
+
+Let's assume the following locations:
+``` sh
+$plugin_dest = "$HOME/cairos/cairos-houdini-user-client"
+$venv_path = "$HOME/cairos/venvs/cairos"
+$package_dest = "$HOME/houdini20.5/packages/cairos_user.json"
+```
+
+###### Clone the plugin directly into `$plugin_dest` or copy it there
+Let's say we clone it directly in the destination:
+``` sh
+mkdir "$HOME/cairos"
+cd $HOME/cairos
+git clone git@github.com:CairosAI/cairos-houdini-user-client.git
+cd cairos-houdini-user-client
+git submodule update --init
+```
+
+###### Copy the json package file to Houdini's user preferences directory
+``` sh
+cp $plugin_dest/cairos_inst.json $package_dest
+```
+Open up the newly copied file in a text editor, and replace the curly brace placeholders with the correct paths - `{{ plugin_dest }}`, `{{venv_path }}`.
+
+###### Create a Python virtual environment and install the dependencies
+You could use the `venv_path` above, or adjust to your liking.
+
+``` sh
+cd $plugin_dest
+python -m venv $venv_path
+source $venv_path/bin/activate
+python -m pip install ./requirements.txt
+```
+
+##### MacOS
+TODO
+
+#### Studios
+##### Windows
 Open up powershell. If you are going to write in Program Files, select "Run as Administrator".
 
 First define the target locations. These paths are defaults, replace them to your preference.
@@ -45,14 +137,14 @@ $venv_path = Join-Path -Path $env:LocalAppData -ChildPath "\cairos\venvs\cairos"
 $package_dest = "c:\Program Files\Houdini20.5.510\packages\cairos_user.json"
 ```
 
-##### Copy the plugin from the cloned directory to your system
+###### Copy the plugin from the cloned directory to your system
 ``` powershell
 cp -Path ".\*" -Destination $plugin_dest -Recurse
 ```
 
 Note, this is optional. If you wish to use the plugin straight from the cloned location, replace `$plugin_dest` in the next section with the cloned location.
 
-##### Copy the Houdini json package file to Houdini's directory.
+###### Copy the Houdini json package file to Houdini's directory.
 This command will copy the file and automatically replace the location placeholders:
 ``` powershell
 Get-Content ./cairos_inst_windows.json | ForEach-Object {$_ -replace "{{ plugin_dest }}", $plugin_dest}| ForEach-Object {$_ -replace "{{ venv_path }}", $venv_path} | ForEach-Object {$_ -replace "\\", "/"} | Set-Content $package_dest
@@ -66,8 +158,8 @@ Alternatively, you can copy the package yourself and replace the placeholders in
   * Replace `{{ plugin_dest }}` with the location where you copied the plugin.
   * Replace backslashes (`\`) with forward slashes (`/`)
 
-##### Create a Python virtual environment and install the dependencies
-###### Using the built-in Python venv module
+###### Create a Python virtual environment and install the dependencies
+####### Using the built-in Python venv module
 Create:
 `python -m venv $venv_path`
 
@@ -77,7 +169,7 @@ Activate:
 Install modules (with environment activated):
 `pip install -r ./requirements.txt`
 
-###### Using [Astral uv](https://docs.astral.sh/uv/)
+####### Using [Astral uv](https://docs.astral.sh/uv/)
 Create:
 `uv venv --python 3.11 $venv_path`
 
@@ -87,7 +179,7 @@ Activate:
 Install modules:
 `uv pip install -r ./requirements.txt`
 
-###### Using [Anaconda](https://docs.conda.io/projects/conda/en/latest/index.html)
+####### Using [Anaconda](https://docs.conda.io/projects/conda/en/latest/index.html)
 *Note:* the Anaconda environment may break some of Houdini's dependencies, and not work.
 
 Create with the provided environment yml:
@@ -102,7 +194,7 @@ Find out venv path, insert it in the Houdini json package:
 * In `cairos_user.json` that you copied to the Houdini packages directory, replace `{{ venv_path }}` with the env location (will require administrator rights). Replace backslashes in the json file with forward slashes.
 * This will tell Houdini where to find the Python library dependencies.
 
-#### Linux
+##### Linux
 Specify destination paths. These paths are defaults, replace them to your preference.
 They will be referenced in subsequent commands.
 ``` sh
@@ -111,9 +203,9 @@ houdini_path=/opt/hfs20.5.510
 venv_path=/usr/local/share/cairos/venvs/cairos
 package_dest=/opt/hfs20.5.510/packages/cairos_user.json
 ```
-##### Copy the plugin from the cloned directory to your system
+###### Copy the plugin from the cloned directory to your system
 
-##### Copy package file
+###### Copy package file
 Either copy the package file using this command:
 ``` sh
 sed -e "s@{{ plugin_dest }}@${plugin_dest}@g" -e "s@{{ venv_path }}@${venv_path}@g" ./cairos_inst.json | tee ${package_dest}
@@ -125,8 +217,8 @@ or straight up copying and replacing the placeholders:
   * Replace `{{ venv_path }}` with the path to the virtual environment specified above.
   * Replace `{{ plugin_dest }}` with the location where you copied the plugin.
 
-##### Create a Python virtual environment and install the dependencies
-###### Using the built-in Python venv module
+###### Create a Python virtual environment and install the dependencies
+####### Using the built-in Python venv module
 Create:
 `python -m venv $venv_path`
 
@@ -136,7 +228,7 @@ Activate:
 Install modules (with environment activated):
 `pip install -r ./requirements.txt`
 
-###### Using [Astral uv](https://docs.astral.sh/uv/)
+####### Using [Astral uv](https://docs.astral.sh/uv/)
 Create:
 `uv venv --python 3.11 $venv_path`
 
