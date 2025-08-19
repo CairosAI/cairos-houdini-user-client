@@ -32,11 +32,13 @@ Linux user:
 
 Windows studio:
 ```
+cd path-to-plugin-repo
 powershell ./install.ps1
 ```
 
 Windows user:
 ```
+cd path-to-plugin-repo
 powershell ./install_user.ps1
 ```
 
@@ -125,6 +127,8 @@ python -m pip install ./requirements.txt
 TODO
 
 ## Studios
+Studio setups require easier centralized configuration.
+
 ### Windows
 Open up powershell. If you are going to write in Program Files, select "Run as Administrator".
 
