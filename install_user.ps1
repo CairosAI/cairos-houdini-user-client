@@ -11,7 +11,7 @@ if (-not $venv_path) { $venv_path = $venv_path_default }
 $package_dest = Read-Host "Package file location [${package_dest_default}] "
 if (-not $package_dest) { $package_dest = $package_dest_default }
 
-$package_dir = (Get-Item $package_dest).parent
+$package_dir = Split-Path -parent $package_dest
 if (-Not (Test-Path $package_dir)) { md -Path $package_dir }
 
 if (-Not (Test-Path $venv_path)) { md -Path $venv_path }
