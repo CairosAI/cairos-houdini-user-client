@@ -1,6 +1,6 @@
-$plugin_dest_default = Join-Path -Path $env:USERPROFILE -ChildPath "cairos\cairos-houdini-user-client"
-$venv_path_default = Join-Path -Path $env:USERPROFILE -ChildPath "cairos\venvs\cairos"
-$package_dest_default = Join-Path -Path $env:USERPROFILE -ChildPath "houdini20.5\packages\cairos_user.json"
+$plugin_dest_default = Join-Path -Path $env:HOME -ChildPath "cairos\cairos-houdini-user-client"
+$venv_path_default = Join-Path -Path $env:HOME -ChildPath "cairos\venvs\cairos"
+$package_dest_default = Join-Path -Path $env:HOME -ChildPath "houdini20.5\packages\cairos_user.json"
 
 $plugin_dest = Read-Host "Plugin install location [${plugin_dest_default}] "
 if (-not $plugin_dest) { $plugin_dest = $plugin_dest_default }
