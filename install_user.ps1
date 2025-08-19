@@ -1,6 +1,8 @@
+# This should be run from within Houdini Command Tools, so that the environment is set up
+
 $plugin_dest_default = Join-Path -Path $HOME -ChildPath "cairos\cairos-houdini-user-client"
 $venv_path_default = Join-Path -Path $HOME -ChildPath "cairos\venvs\cairos"
-$package_dest_default = Join-Path -Path $HOME -ChildPath "houdini20.5\packages\cairos_user.json"
+$package_dest_default = Join-Path -Path $env:HOUDINI_USER_PREF_DIR -ChildPath "packages\cairos_user.json"
 
 $plugin_dest = Read-Host "Plugin install location [${plugin_dest_default}] "
 if (-not $plugin_dest) { $plugin_dest = $plugin_dest_default }

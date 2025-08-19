@@ -1,5 +1,5 @@
 plugin_dest_default=/opt/houdini_plugins/cairos-houdini-user-client
-houdini_path_default=/opt/hfs20.5.510
+houdini_path_default=${HFS:-/opt/hfs20.5}
 venv_path_default=/usr/local/share/cairos/venvs/cairos
 
 read -p "Plugin install location [${plugin_dest_default}] " plugin_dest
