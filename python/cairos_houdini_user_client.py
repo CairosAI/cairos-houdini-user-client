@@ -7,6 +7,7 @@ import shutil
 import json
 from typing import Any, Dict, List, Tuple, Type, TypeVar, cast, AsyncGenerator
 from datetime import datetime
+import shutil
 
 from cairos_python_lowlevel.cairos_python_lowlevel.models.avatar_public import AvatarPublic
 from cairos_python_lowlevel.cairos_python_lowlevel.models.body_post_avatar_avatar_uuid_upload_post import BodyPostAvatarAvatarUuidUploadPost
@@ -179,6 +180,7 @@ async def sse_handler(client: AuthenticatedClient, node: hou.Node):
                     update_status(node, f"Retarget error: {evt.data}")
                 elif evt.event == "usage_report":
                     update_status(node, evt.data)
+                    await display_credits(evt.data, node)
                 else:
                     if node.parm("debug_log").eval() and evt.event == "debug":
                         update_status(node, str(evt))
@@ -613,9 +615,13 @@ async def check_credits(client: AuthenticatedClient, node: hou.Node):
         outseta_nocode_access_token=client._cookies.get(cairos_python_client.token_cookie_name, ""))
 
     update_status(node, f"Result: {result}")
+    await display_credits(result, node)
     hou.ui.displayMessage(
         result,
         title="Cairos credits")
+
+async def display_credits(credits: str, node: hou.Node):
+    node.parm("credits").set(credits)
 
 async def load_exported_avatar(output_directory: Path, node: hou.Node):
     avatar_file = output_directory.joinpath("output_autorig.bgeo.sc")
@@ -728,6 +734,18 @@ def clear_chat(node: hou.Node):
         chat_queue.clear()
     return node.parm("chat_display_messages").set("")
 
+async def clear_exported_animations(node: hou.Node):
+    for d in Path(node.parm("tempdir").eval()).joinpath("animations").iterdir():
+        shutil.rmtree(d)
+
+    node.setCachedUserData("downloaded_animations", [])
+
+async def clear_exported_avatars(node: hou.Node):
+    for d in Path(node.parm("tempdir").eval()).joinpath("avatars").iterdir():
+        shutil.rmtree(d)
+
+    node.setCachedUserData("downloaded_avatars", [])
+
 def clear(node: hou.Node):
     node.parm("prompt").set("")
     clear_status(node)
@@ -761,19 +779,25 @@ async def close_client(client: AuthenticatedClient, node: hou.Node):
 
 def parse_existing_downloads(temp_dir: Path) -> list[tuple[str, str]]:
     downloads = []
-    for sub in temp_dir.iterdir():
-        download_file = next(sub.glob("**/output_full.bgeo.sc"), None)
-        if download_file:
-            downloads.append((sub.name, download_file.parent))
+    if temp_dir.exists():
+        for sub in temp_dir.iterdir():
+            download_file = next(sub.glob("**/output_full.bgeo.sc"), None)
+            if download_file:
+                downloads.append((sub.name, download_file.parent))
+    else:
+        temp_dir.mkdir()
 
     return downloads
 
 def parse_existing_avatar_downloads(temp_dir: Path) -> list[tuple[str, str]]:
     downloads = []
-    for sub in temp_dir.iterdir():
-        download_file = next(sub.glob("**/output_autorig.bgeo.sc"), None)
-        if download_file:
-            downloads.append((sub.name, download_file.parent))
+    if temp_dir.exists():
+        for sub in temp_dir.iterdir():
+            download_file = next(sub.glob("**/output_autorig.bgeo.sc"), None)
+            if download_file:
+                downloads.append((sub.name, download_file.parent))
+    else:
+        temp_dir.mkdir()
 
     return downloads
 
@@ -784,10 +808,10 @@ async def handle_login(url, username, password, node):
         node.setCachedUserData("chat_queue", deque(maxlen=10))
         node.setCachedUserData(
             "downloaded_animations",
-            parse_existing_downloads(Path(node.parm("tempdir").eval())))
+            parse_existing_downloads(Path(node.parm("tempdir").eval()).joinpath("animations")))
         node.setCachedUserData(
             "downloaded_avatars",
-            parse_existing_avatar_downloads(Path(node.parm("tempdir").eval())))
+            parse_existing_avatar_downloads(Path(node.parm("tempdir").eval()).joinpath("avatars")))
 
         node.parm("status").set("")
         unauth_client = Client(
