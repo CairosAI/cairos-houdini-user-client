@@ -389,29 +389,32 @@ async def upload_avatar(
     """
     clear_status(node)
     update_status(node, f"Uploading avatar {avatar_name}")
-    avatar: AvatarPublic | None = get_avatar_from_cache(node, avatar_name)
-
-    if avatar is None:
-        update_status(node, "Avatar was not found. Creating a new one.")
-        avatar_resp = await create_blank_avatar_avatar_new_label_post.asyncio(
-            label=avatar_name,
-            client=client,
-            outseta_nocode_access_token=client._cookies.get(cairos_python_client.token_cookie_name, ""),
-            cairos_session=cairos_python_client.session_or_unset(client._cookies))
-
-        update_status(node, "Created new avatar.")
-        if avatar_resp and not isinstance(avatar_resp, HTTPValidationError):
-            avatar = avatar_resp
-
-    assert avatar, "No avatar selected"
-
-    tmp: tuple[int, str] = tempfile.mkstemp(
-        prefix=f"cairos_{avatar_name}",
-        suffix=".bgeo",
-        dir=node.parm("tempdir").eval())
-
-    # TODO for now do not delete temporary file
     try:
+        avatar: AvatarPublic | None = get_avatar_from_cache(node, avatar_name)
+
+        if avatar is None:
+            update_status(node, "Avatar was not found. Creating a new one.")
+            avatar_resp = await create_blank_avatar_avatar_new_label_post.asyncio(
+                label=avatar_name,
+                client=client,
+                outseta_nocode_access_token=client._cookies.get(cairos_python_client.token_cookie_name, ""),
+                cairos_session=cairos_python_client.session_or_unset(client._cookies))
+
+            update_status(node, "Created new avatar.")
+            if avatar_resp and not isinstance(avatar_resp, HTTPValidationError):
+                avatar = avatar_resp
+                avatars_cache = node.cachedUserData("avatars")
+                avatars_cache.append(avatar)
+                node.setCachedUserData("avatars", avatars_cache)
+
+        assert avatar, "No avatar selected"
+
+        tmp: tuple[int, str] = tempfile.mkstemp(
+            prefix=f"cairos_{avatar_name}",
+            suffix=".bgeo",
+            dir=node.parm("tempdir").eval())
+
+        # TODO for now do not delete temporary file
         with open(tmp[1], "wb+") as f:
             update_status(node, "Exporting geometry for avatar...")
             avatar_geo_node.geometry().saveToFile(f.name)
@@ -708,19 +711,23 @@ async def update_avatar_status(client: AuthenticatedClient, node: hou.Node, avat
         return node.parm("avatar_status").set(",".join(str(a) for a in avatar.status))
 
 async def reload_avatars_cache(client: AuthenticatedClient, node: hou.Node):
-    response = await get_avatars_avatar_get.asyncio_detailed(
-        client=client,
-        outseta_nocode_access_token=client._cookies.get(cairos_python_client.token_cookie_name, ""))
+    try:
+        response = await get_avatars_avatar_get.asyncio_detailed(
+            client=client,
+            outseta_nocode_access_token=client._cookies.get(cairos_python_client.token_cookie_name, ""))
 
-    cookies = cairos_python_client.parse_cookies(response.headers.get("Set-Cookie"))
-    if "cairos_session" in cookies and "cairos_session" not in client._cookies:
-        update_status(node, f"Setting session: {cookies['cairos_session']}")
-        client._cookies.update({
-            "cairos_session": cookies["cairos_session"]})
+        cookies = cairos_python_client.parse_cookies(response.headers.get("Set-Cookie"))
+        if "cairos_session" in cookies and "cairos_session" not in client._cookies:
+            update_status(node, f"Setting session: {cookies['cairos_session']}")
+            client._cookies.update({
+                "cairos_session": cookies["cairos_session"]})
 
-    avatars = response.parsed
+        avatars = response.parsed
+        update_status(node, f"Loaded avatars")
 
-    return node.setCachedUserData("avatars", avatars)
+        return node.setCachedUserData("avatars", avatars)
+    except:
+        update_status(node, traceback.format_exc())
 
 def clear_status(node: hou.Node):
     q: deque | None = node.cachedUserData("status_queue")
@@ -802,7 +809,6 @@ def parse_existing_avatar_downloads(temp_dir: Path) -> list[tuple[str, str]]:
     return downloads
 
 async def handle_login(url, username, password, node):
-    # Here initialize asyncio loop
     try:
         node.setCachedUserData("status_queue", deque(maxlen=5))
         node.setCachedUserData("chat_queue", deque(maxlen=10))
@@ -840,7 +846,8 @@ async def handle_login(url, username, password, node):
             node.setCachedUserData("cairos_client", client)
             update_status(node, "logged in")
 
-            await start_sse_listener(client, node)
+            loop = asyncio.get_event_loop()
+            loop.create_task(start_sse_listener(client, node))
             await reload_avatars_cache(client, node)
         else:
             update_status(node, "could not log in")
