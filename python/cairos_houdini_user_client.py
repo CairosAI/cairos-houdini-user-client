@@ -110,9 +110,10 @@ async def sse_handler(client: AuthenticatedClient, node: hou.Node):
                 method="GET",
                 url=f"{client._base_url}/event_log") as event_source:
             print(event_source.response.cookies)
-            if event_source.response.cookies.get("cairos_session"):
+            sess_id = event_source.response.cookies.get("cairos_session")
+            if sess_id and "cairos_session" not in client._cookies:
                 update_status(node, f"Setting session: {event_source.response.cookies.get('cairos_session')}")
-                client._cookies["cairos_session"] = event_source.response.cookies.get("cairos_session")
+                client._cookies["cairos_session"] = sess_id
 
             sse_iter = event_source.aiter_sse()
             node.setCachedUserData("cairos_sse_iter", sse_iter)
