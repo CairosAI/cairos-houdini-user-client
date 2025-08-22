@@ -29,6 +29,7 @@ from cairos_python_lowlevel.cairos_python_lowlevel.models.stored_message_type im
 
 from cairos_python_lowlevel.cairos_python_lowlevel.models.chat_output import ChatOutput
 from cairos_python_lowlevel.cairos_python_lowlevel.models.chat_thread_in_list import ChatThreadInList
+from cairos_python_lowlevel.cairos_python_lowlevel.models.chat_thread_public import ChatThreadPublic
 from cairos_python_lowlevel.cairos_python_lowlevel.models.human_message import HumanMessage
 from cairos_python_lowlevel.cairos_python_lowlevel.models.orm_animation import OrmAnimation
 from cairos_python_lowlevel.cairos_python_lowlevel.models.export import Export
@@ -40,6 +41,7 @@ from cairos_python_lowlevel.cairos_python_lowlevel.api.default import (
     export_anim_anim_thread_id_trigger_msg_id_export_post,
     post_avatar_avatar_uuid_upload_post,
     get_avatars_avatar_get,
+    new_thread_thread_post,
     get_avatar_avatar_uuid_get,
     get_anim_anim_thread_id_trigger_msg_id_get,
     get_session_id_session_id_get,
@@ -758,6 +760,10 @@ def clear(node: hou.Node):
     clear_status(node)
     clear_chat(node)
     update_animation_status(node, "")
+    client = node.cachedUserData("cairos_client")
+    thread = cairos_python_client.create_thread(client=client)
+    node.setCachedUserData("current_thread", thread)
+    node.setCachedUserData("cairos_history", [])
 
 def on_exit(loop: asyncio.AbstractEventLoop):
     async def ashutdown(loop):
@@ -857,6 +863,15 @@ async def handle_login(url, username, password, node):
 
             loop = asyncio.get_event_loop()
             loop.create_task(start_sse_listener(client, node))
+
+            # start out with a new thread
+            chat_thread: ChatThreadPublic | HTTPValidationError | None = await new_thread_thread_post.asyncio(
+                client=client,
+                outseta_nocode_access_token=client._cookies.get(
+                    cairos_python_client.token_cookie_name, ""))
+
+            assert isinstance(chat_thread, ChatThreadPublic)
+            node.setCachedUserData("current_thread", chat_thread)
             await reload_avatars_cache(client, node)
         else:
             update_status(node, "could not log in")
