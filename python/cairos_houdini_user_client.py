@@ -42,6 +42,7 @@ from cairos_python_lowlevel.cairos_python_lowlevel.api.default import (
     get_avatars_avatar_get,
     get_avatar_avatar_uuid_get,
     get_anim_anim_thread_id_trigger_msg_id_get,
+    get_session_id_session_id_get,
     trigger_autorig_avatar_uuid_autorig_post,
     update_avatar_mapping_llm_avatar_uuid_llm_mapping_patch,
     create_blank_avatar_avatar_new_label_post,
@@ -109,11 +110,6 @@ async def sse_handler(client: AuthenticatedClient, node: hou.Node):
                 client=client.get_async_httpx_client(),
                 method="GET",
                 url=f"{client._base_url}/event_log") as event_source:
-            print(event_source.response.cookies)
-            sess_id = event_source.response.cookies.get("cairos_session")
-            if sess_id and "cairos_session" not in client._cookies:
-                update_status(node, f"Setting session: {event_source.response.cookies.get('cairos_session')}")
-                client._cookies["cairos_session"] = sess_id
 
             sse_iter = event_source.aiter_sse()
             node.setCachedUserData("cairos_sse_iter", sse_iter)
@@ -228,7 +224,7 @@ async def send_chat(client: AuthenticatedClient, chat_thread: ChatThreadInList, 
                 history=[m.data for m in history],
                 btl_objs=[]),
             outseta_nocode_access_token=client._cookies.get(cairos_python_client.token_cookie_name, ""),
-            cairos_session=cairos_python_client.session_or_unset(client._cookies))
+            cairos_session=cairos_python_client.get_session(client._cookies))
 
         if isinstance(response, ChatOutput):
             messages = list(map(lambda m: StoredMessage.from_dict(m),
@@ -288,7 +284,7 @@ async def export_animation(client: AuthenticatedClient, thread_id: str, trigger_
         trigger_msg_id=trigger_msg.hex,
         client=client,
         outseta_nocode_access_token=client._cookies.get(cairos_python_client.token_cookie_name, ""),
-        cairos_session=cairos_python_client.session_or_unset(client._cookies))
+        cairos_session=cairos_python_client.get_session(client._cookies))
 
     update_status(node, "Export response received. Waiting for export to complete.")
 
@@ -328,7 +324,7 @@ async def send_retarget(
         avatar_id=avatar.id.hex,
         client=client,
         outseta_nocode_access_token=client._cookies.get(cairos_python_client.token_cookie_name, ""),
-        cairos_session=cairos_python_client.session_or_unset(client._cookies))
+        cairos_session=cairos_python_client.get_session(client._cookies))
 
     update_status(node, "Retarget response received. Waiting for retarget to complete.")
 
@@ -344,7 +340,7 @@ async def autorig_avatar(client: AuthenticatedClient, avatar_name: str, node: ho
             uuid=avatar.id.hex,
             client=client,
             outseta_nocode_access_token=client._cookies.get(cairos_python_client.token_cookie_name, ""),
-            cairos_session=cairos_python_client.session_or_unset(client._cookies))
+            cairos_session=cairos_python_client.get_session(client._cookies))
 
         update_status(node, "Autorig response received. Wait for process to complete.")
     except Exception as e:
@@ -360,7 +356,7 @@ async def llm_map_avatar(client: AuthenticatedClient, avatar_name: str, node: ho
             uuid=avatar.id.hex,
             client=client,
             outseta_nocode_access_token=client._cookies.get(cairos_python_client.token_cookie_name, ""),
-            cairos_session=cairos_python_client.session_or_unset(client._cookies))
+            cairos_session=cairos_python_client.get_session(client._cookies))
     except Exception as e:
         update_status(node, f"Error when requesting automapping: {e}")
 
@@ -370,7 +366,8 @@ async def create_avatar(client: AuthenticatedClient, avatar_name: str, node: hou
         res = await create_blank_avatar_avatar_new_label_post.asyncio(
             avatar_name,
             client=client,
-            outseta_nocode_access_token=client._cookies.get(cairos_python_client.token_cookie_name, ""))
+            outseta_nocode_access_token=client._cookies.get(cairos_python_client.token_cookie_name, ""),
+            cairos_session=cairos_python_client.get_session(client._cookies))
     except Exception as e:
         update_status(node, f"Error while creating avatar: {e}")
         return
@@ -399,7 +396,7 @@ async def upload_avatar(
                 label=avatar_name,
                 client=client,
                 outseta_nocode_access_token=client._cookies.get(cairos_python_client.token_cookie_name, ""),
-                cairos_session=cairos_python_client.session_or_unset(client._cookies))
+                cairos_session=cairos_python_client.get_session(client._cookies))
 
             update_status(node, "Created new avatar.")
             if avatar_resp and not isinstance(avatar_resp, HTTPValidationError):
@@ -430,7 +427,7 @@ async def upload_avatar(
                         payload=f,
                         file_name=f.name)),
                 outseta_nocode_access_token=client._cookies.get(cairos_python_client.token_cookie_name, ""),
-                cairos_session=cairos_python_client.session_or_unset(client._cookies))
+                cairos_session=cairos_python_client.get_session(client._cookies))
 
             update_status(node, "Avatar file uploaded. Wait for processing.")
     except:
@@ -448,7 +445,7 @@ async def export_avatar(client: AuthenticatedClient, avatar_name: str, node: hou
             uuid=avatar.id.hex,
             client=client,
             outseta_nocode_access_token=client._cookies.get(cairos_python_client.token_cookie_name, ""),
-            cairos_session=cairos_python_client.session_or_unset(client._cookies))
+            cairos_session=cairos_python_client.get_session(client._cookies))
 
         update_status(node, "Avatar export response received. Wait for process to complete.")
     except:
@@ -619,6 +616,7 @@ async def check_credits(client: AuthenticatedClient, node: hou.Node):
         outseta_nocode_access_token=client._cookies.get(cairos_python_client.token_cookie_name, ""))
 
     update_status(node, f"Result: {result}")
+    assert isinstance(result, str)
     await display_credits(result, node)
     hou.ui.displayMessage(
         result,
@@ -715,7 +713,8 @@ async def reload_avatars_cache(client: AuthenticatedClient, node: hou.Node):
     try:
         response = await get_avatars_avatar_get.asyncio_detailed(
             client=client,
-            outseta_nocode_access_token=client._cookies.get(cairos_python_client.token_cookie_name, ""))
+            outseta_nocode_access_token=client._cookies.get(cairos_python_client.token_cookie_name, ""),
+            cairos_session=cairos_python_client.get_session(client._cookies))
 
         cookies = cairos_python_client.parse_cookies(response.headers.get("Set-Cookie"))
         if "cairos_session" in cookies and "cairos_session" not in client._cookies:
@@ -846,6 +845,15 @@ async def handle_login(url, username, password, node):
         if client:
             node.setCachedUserData("cairos_client", client)
             update_status(node, "logged in")
+
+            sess_id = await get_session_id_session_id_get.asyncio(
+                client=client,
+                outseta_nocode_access_token=client._cookies.get(
+                    cairos_python_client.token_cookie_name, ""))
+            if isinstance(sess_id, str):
+                client._cookies["cairos_session"] = sess_id
+            else:
+                update_status(node, f"Failed while getting session id {sess_id}")
 
             loop = asyncio.get_event_loop()
             loop.create_task(start_sse_listener(client, node))
