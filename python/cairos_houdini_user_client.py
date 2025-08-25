@@ -798,7 +798,7 @@ def parse_existing_downloads(temp_dir: Path) -> list[tuple[str, str]]:
             if download_file:
                 downloads.append((sub.name, download_file.parent))
     else:
-        temp_dir.mkdir()
+        temp_dir.mkdir(parents=True, exist_ok=True)
 
     return downloads
 
@@ -810,7 +810,7 @@ def parse_existing_avatar_downloads(temp_dir: Path) -> list[tuple[str, str]]:
             if download_file:
                 downloads.append((sub.name, download_file.parent))
     else:
-        temp_dir.mkdir()
+        temp_dir.mkdir(parents=True, exist_ok=True)
 
     return downloads
 
