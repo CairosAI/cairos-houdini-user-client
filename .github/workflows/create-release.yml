@@ -1,0 +1,24 @@
+name: Create release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+      - name: Install git-archive-all
+        run: pip install git-archive-all
+      - name: Create release archive
+        run: git-archive-all -v ${{ runner.temp }}/cairos_houdini_user_client_${{ github.ref_name }}.zip
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ runner.temp }}/cairos_houdini_user_client_${{ github.ref_name }}.zip
+          tag_name: ${{ github.ref_name }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
