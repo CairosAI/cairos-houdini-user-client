@@ -1,17 +1,13 @@
 # NOTE: Run `source /opt/hfs20.0.547/houdini_setup` first to get the correct environment.
 
 plugin_dest_default=${HOME}/cairos/cairos-houdini-user-client
-venv_path_default=${HOME}/cairos/venvs/cairos
-package_dest_default=${HIH}/packages/cairos_user.json
 
 read -p "Plugin install location [${plugin_dest_default}] " plugin_dest
 plugin_dest=${plugin_dest:-${plugin_dest_default}}
 
-read -p "Houdini package location [${package_dest_default}] " package_dest
-package_dest=${package_dest:-${package_dest_default}}
+package_dest="${HIH}/packages/cairos_user.json"
 
-read -p "Venv to install python dependencies in [${venv_path_default}] " venv_path
-venv_path=${venv_path:-${venv_path_default}}
+venv_path="${plugin_dest}/.venv"
 
 if [ ! -d ${plugin_dest} ]; then
     mkdir -p ${plugin_dest}
