@@ -15,14 +15,16 @@ Houdini provides command line tools to set the correct environment, so use these
 # With the provided installation scripts
 These scripts should cover most regular use cases.
 
-Before running them, enter the Houdini environment. On Windows, this is done by starting Command Line Tools from the start menu.
+Before running them, enter the Houdini environment. On Windows, this is done by starting Command Line Tools from the start menu or the Houdini launcher.
 On Linux, perform `source /opt/hfs20.0.547/houdini_setup` to load the environment.
 
 Then, run the scripts from the directory where you cloned the plugin.
 
+For the studio environment and other system-wide installations use the `install_studio` scripts. If running as a regular user, the `install_user` scripts are preferable.
+
 Linux studio:
 ```
-./install.sh
+./install_studio.sh
 ```
 
 Linux user:
@@ -33,7 +35,7 @@ Linux user:
 Windows studio:
 ```
 cd path-to-plugin-repo
-powershell ./install.ps1
+powershell ./install_studio.ps1
 ```
 
 Windows user:
