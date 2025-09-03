@@ -1,14 +1,15 @@
 plugin_dest_default=/opt/houdini_plugins/cairos-houdini-user-client
 houdini_path_default=${HFS:-/opt/hfs20.5}
-venv_path_default=/usr/local/share/cairos/venvs/cairos
 
-read -p "Plugin install location [${plugin_dest_default}] " plugin_dest
+read -p "Plugin install location [${plugin_dest_default}]: " plugin_dest
 plugin_dest=${plugin_dest:-${plugin_dest_default}}
 
-read -p "Houdini location [${houdini_path_default}] " houdini_path
+venv_path_default="${plugin_dest}/.venv"
+
+read -p "Houdini location [${houdini_path_default}]: " houdini_path
 houdini_path=${houdini_path:-${houdini_path_default}}
 
-read -p "Venv to install python dependencies in [${venv_path_default}] " venv_path
+read -p "Venv to install python dependencies in [${venv_path_default}]: " venv_path
 venv_path=${venv_path:-${venv_path_default}}
 
 echo "Installing plugin. Note that you might need elevated privileges."

@@ -5,7 +5,7 @@ uv venv --python 3.11
 
 Clone the repo, then get the dependencies
 ``` shell
-git submodule update --init
+git submodule update --init --recursive
 ```
 
 There are two primary ways of installing plugins in Houdini - user-specific, and "global" usually employed by studios. The global installation requires administrative privileges, and might require more effort.
@@ -15,8 +15,8 @@ Houdini provides command line tools to set the correct environment, so use these
 # With the provided installation scripts
 These scripts should cover most regular use cases.
 
-Before running them, enter the Houdini environment. On Windows, this is done by starting Command Line Tools from the start menu or the Houdini launcher.
-On Linux, perform `source /opt/hfs20.0.547/houdini_setup` to load the environment.
+Before running them, enter the Houdini environment. On Windows, this is done by starting [Command Line Tools](https://www.sidefx.com/faq/question/how-do-i-set-up-the-houdini-environment-for-command-line-tools/) from the start menu or the Houdini launcher.
+On Linux, perform `source /opt/hfs20.0.547/houdini_setup` to load the environment (adjusting the Houdini version).
 
 Then, run the scripts from the directory where you cloned the plugin.
 
