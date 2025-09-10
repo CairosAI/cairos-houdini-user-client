@@ -21,4 +21,4 @@ jobs:
           files: ${{ runner.temp }}/cairos_houdini_user_client_${{ github.ref_name }}.zip
           tag_name: ${{ github.ref_name }}
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.ACTIONS_PAT }}
