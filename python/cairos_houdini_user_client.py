@@ -10,6 +10,7 @@ from datetime import datetime
 import shutil
 
 from cairos_python_lowlevel.cairos_python_lowlevel.models.avatar_public import AvatarPublic
+from cairos_python_lowlevel.cairos_python_lowlevel.models.avatar_rebuilt import AvatarRebuilt
 from cairos_python_lowlevel.cairos_python_lowlevel.models.body_post_avatar_avatar_uuid_upload_post import BodyPostAvatarAvatarUuidUploadPost
 from cairos_python_lowlevel.cairos_python_lowlevel.models.http_validation_error import HTTPValidationError
 from cairos_python_lowlevel.cairos_python_lowlevel.types import File
@@ -43,6 +44,8 @@ from cairos_python_lowlevel.cairos_python_lowlevel.api.default import (
     get_avatars_avatar_get,
     new_thread_thread_post,
     get_avatar_avatar_uuid_get,
+    get_avatars_rebuilt_avatar_rebuilt_get,
+    get_avatar_rebuilt_by_id_avatar_rebuilt_uuid_get,
     get_anim_anim_thread_id_trigger_msg_id_get,
     get_session_id_session_id_get,
     trigger_autorig_avatar_uuid_autorig_post,
@@ -201,6 +204,12 @@ def sysopen(file: str):
 
 def get_avatar_from_cache(node: hou.Node, avatar_name: str) -> AvatarPublic | None:
     return next((avatar for avatar in node.cachedUserData("avatars") if avatar.label == avatar_name),
+                None)
+
+def get_avatar_rebuilt_from_cache(node: hou.Node, avatar_name: str) -> AvatarRebuilt | None:
+    return next((avatar
+                 for avatar in node.cachedUserData("avatars_rebuilt")
+                 if avatar.label == avatar_name),
                 None)
 
 async def send_chat(client: AuthenticatedClient, chat_thread: ChatThreadInList, prompt, node: hou.Node):
@@ -612,6 +621,55 @@ async def download_exported_avatar(
 
     return out_dir
 
+async def download_avatar_rebuilt(
+        client: AuthenticatedClient,
+        avatar_name: str,
+        temp_dir: Path,
+        node: hou.Node):
+    time_string = datetime.now().isoformat().replace(":", "_")
+    update_status(node, f"Starting rebuilt avatar download: {avatar_name}")
+    avatar_rebuilt = get_avatar_rebuilt_from_cache(
+        node,
+        avatar_name)
+
+    assert isinstance(avatar_rebuilt , AvatarRebuilt), f"Rebuilt avatar not found: {avatar_name}"
+    time_and_name = "_".join((time_string, avatar_rebuilt.label))
+    base_dir = temp_dir\
+        .joinpath("avatars_rebuilt")\
+        .joinpath(time_and_name)
+
+    filename = base_dir\
+        .joinpath(f"{avatar_rebuilt.id}")\
+        .with_suffix(Path(avatar_rebuilt.filepath).suffix)
+
+    out_dir = base_dir\
+        .joinpath(f"{avatar_rebuilt.id}/extracted")
+
+    if not out_dir.exists():
+        out_dir.mkdir(parents=True, exist_ok=True)
+
+    # Download content with explicit client get. This probably does not work in api?
+    result = await client.get_async_httpx_client().get(
+        url=f"{client._base_url}/avatar_rebuilt/{avatar_rebuilt.id}/download")
+
+    update_status(node, f"Download complete: {result}")
+    with open(filename, "wb") as f:
+        f.write(result.content)
+        update_status(node, f"Wrote {filename}")
+
+    if sys.platform == "win32":
+        # on Windows, long paths need this prefix to work (with some operations)
+        filename = "\\\\?\\" + str(filename)
+
+    shutil.unpack_archive(filename, out_dir)
+
+    downloads = node.cachedUserData("downloaded_avatars_rebuilt")
+    downloads.append((time_and_name, out_dir))
+    node.setCachedUserData("downloaded_avatars_rebuilt", downloads)
+    node.parm("select_exported_avatar_rebuilt").set(time_and_name)
+
+    return out_dir
+
 async def check_credits(client: AuthenticatedClient, node: hou.Node):
     result = await check_credit_balance_credit_balance_get.asyncio(
         client=client,
@@ -728,6 +786,25 @@ async def reload_avatars_cache(client: AuthenticatedClient, node: hou.Node):
         update_status(node, f"Loaded avatars")
 
         return node.setCachedUserData("avatars", avatars)
+    except:
+        update_status(node, traceback.format_exc())
+
+async def reload_avatars_rebuilt_cache(client: AuthenticatedClient, node: hou.Node):
+    try:
+        response = await get_avatars_rebuilt_avatar_rebuilt_get.asyncio_detailed(
+            client=client,
+            outseta_nocode_access_token=client._cookies.get(cairos_python_client.token_cookie_name, ""))
+
+        cookies = cairos_python_client.parse_cookies(response.headers.get("Set-Cookie"))
+        if "cairos_session" in cookies and "cairos_session" not in client._cookies:
+            update_status(node, f"Setting session: {cookies['cairos_session']}")
+            client._cookies.update({
+                "cairos_session": cookies["cairos_session"]})
+
+        avatars = response.parsed
+        update_status(node, f"Loaded rebuilt avatars")
+
+        return node.setCachedUserData("avatars_rebuilt", avatars)
     except:
         update_status(node, traceback.format_exc())
 
