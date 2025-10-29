@@ -67,6 +67,8 @@ from attrs import define as _attrs_define
 
 import traceback
 
+logging_source = hou.logging.createSource("cairos")
+
 T = TypeVar("T", bound="AvatarExport")
 @_attrs_define
 class AvatarExport:
@@ -188,9 +190,17 @@ async def sse_handler(client: AuthenticatedClient, node: hou.Node):
                         update_status(node, str(evt))
                     else:
                         # print irrelevant messages only in the console
-                        print(evt)
+                        hou.logging.log(
+                            hou.logging.LogEntry(
+                                message=str(evt),
+                                severity=hou.severityType.Message,
+                                source="cairos"))
     except:
-        print(traceback.format_exc())
+        hou.logging.log(
+            entry=hou.logging.LogEntry(
+                message=traceback.format_exc(),
+                severity=hou.severityType.Error,
+                source="cairos"))
     finally:
         update_status(node, "Exiting sse loop")
 
@@ -265,7 +275,11 @@ async def send_chat(client: AuthenticatedClient, chat_thread: ChatThreadInList, 
                      and m.data.content)])
 
             update_chat_history(node, messages)
-            print(f"Messages are: {response.messages}")
+            hou.logging.log(
+                hou.logging.LogEntry(
+                    message=f"Messages are: {response.messages}",
+                    severity=hou.severityType.Message,
+                    source="cairos"))
 
     except UnexpectedStatus as e:
         update_status(node, f"Request error: {e.status_code}")
@@ -632,7 +646,9 @@ async def download_avatar_rebuilt(
         node,
         avatar_name)
 
-    assert isinstance(avatar_rebuilt , AvatarRebuilt), f"Rebuilt avatar not found: {avatar_name}"
+    assert avatar_rebuilt and isinstance(avatar_rebuilt , AvatarRebuilt), \
+        f"Rebuilt avatar not found: {avatar_name}"
+
     time_and_name = "_".join((time_string, avatar_rebuilt.label))
     base_dir = temp_dir\
         .joinpath("avatars_rebuilt")\
@@ -731,7 +747,12 @@ def update_status(node: hou.Node, status: str):
         q = deque(maxlen=5)
 
     q.append(f"{datetime.now().isoformat()}: {status}")
-    print(status)
+    hou.logging.log(
+        hou.logging.LogEntry(
+            message=status,
+            severity=hou.severityType.Message,
+            source="cairos"))
+
     return node.parm("status").set("\n".join([msg for msg in q]))
 
 def update_animation_status(node: hou.Node, status: str):
@@ -763,7 +784,12 @@ def update_chat_history(node: hou.Node, messages: list[StoredMessage]):
 async def update_avatar_status(client: AuthenticatedClient, node: hou.Node, avatar_name: str):
     avatar: AvatarPublic | None = get_avatar_from_cache(node, avatar_name)
     if not avatar:
-        print(f"Avatar not found: {avatar_name}")
+        hou.logging.log(
+            hou.logging.LogEntry(
+                message=f"Avatar not found: {avatar_name}",
+                severity=hou.severityType.Warning,
+                source="cairos"))
+
         return
 
     if avatar.status:
@@ -862,7 +888,12 @@ async def close_client(client: AuthenticatedClient, node: hou.Node):
     try:
         await client.get_async_httpx_client().aclose()
     except:
-        print(traceback.format_exc())
+        hou.logging.log(
+            hou.logging.LogEntry(
+                message=traceback.format_exc(),
+                severity=hou.severityType.Error,
+                source="cairos"))
+
     finally:
         node.destroyCachedUserData("cairos_sse_iter")
         node.destroyCachedUserData("cairos_client")
@@ -938,10 +969,12 @@ async def handle_login(url, username, password, node):
             else:
                 update_status(node, f"Failed while getting session id {sess_id}")
 
-            loop = asyncio.get_event_loop()
+            # split sse listener into separate task
+            loop: haio.HoudiniEventLoop | None = node.cachedUserData("cairos_loop")
+            assert loop
             loop.create_task(start_sse_listener(client, node))
 
-            # start out with a new thread
+            # start out with a new chat thread
             chat_thread: ChatThreadPublic | HTTPValidationError | None = await new_thread_thread_post.asyncio(
                 client=client,
                 outseta_nocode_access_token=client._cookies.get(
@@ -953,4 +986,10 @@ async def handle_login(url, username, password, node):
         else:
             update_status(node, "could not log in")
     except Exception:
-        update_status(node, f"Error!!! {traceback.format_exc()}")
+        tb = traceback.format_exc()
+        hou.logging.log(
+            entry=hou.logging.LogEntry(
+                message=tb,
+                severity=hou.severityType.Error,
+                source="cairos"))
+        update_status(node, f"Error!!! {tb}")

@@ -6,7 +6,7 @@
             "value": "/home/mmoshev@bottleship.local/code/cairos-houdini-user-client/python"
         }, {
             "method": "append",
-            "value": "/usr/local/share/cairos/venvs/cairos-client/lib/python3.10/site-packages"
+            "value": "/usr/local/share/cairos/venvs/cairos-client/lib/python3.11/site-packages"
         }]},
         { "HOUDINI_OTLSCAN_PATH": "/home/mmoshev@bottleship.local/code/cairos-houdini-user-client/hda"}
     ]

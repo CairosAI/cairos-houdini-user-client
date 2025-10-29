@@ -1,2 +1,2 @@
-package_dest=/opt/hfs20.0.547/packages/cairos_user.json
+package_dest=/opt/hfs21.0.440/packages/cairos_user.json
 cp ./cairos_dev.json ${package_dest}
