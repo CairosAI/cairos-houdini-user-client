@@ -1,6 +1,6 @@
 # Cairos Houdini user client
 
-Use [Cairos](https://cairos.ai) inside Houdini
+Use [Cairos](https://cairos.bottleshipvfx.com) inside Houdini
 
 ## Installing
 See [INSTALL.md](INSTALL.md)
@@ -11,9 +11,9 @@ See [INSTALL.md](INSTALL.md)
 
 In Houdini, you can add a Geometry node `Cairos Houdini user client`.
 
-Go to the Settings tab and click login. Enter the Cairos address you will be using, your username and password. The public address is https://app.cairos.ai/api
+Go to the Settings tab and click login. Enter the Cairos address you will be using, your username and password. The public address is <https://app.cairos.bottleshipvfx.com/api>
 
-To sign up, go to https://cairos.ai .
+To sign up, go to <https://cairos.bottleshipvfx.com> .
 
 On successful login, you can go to the Animation tab and submit chat prompts, and manage your avatars in the Avatar tab.
 
